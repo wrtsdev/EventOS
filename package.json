@@ -1,0 +1,26 @@
+{
+  "name": "wrts-eventos",
+  "private": true,
+  "version": "0.1.0",
+  "description": "WRTS EventOS — the community operating system for walks, runs, and movement-powered experiences.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.js",
+    "check": "npm run test && npm run build",
+    "build:artifact": "npm run build && node scripts/build-artifact.mjs"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.3.4",
+    "vite": "5.4.11"
+  }
+}
