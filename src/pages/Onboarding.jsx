@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useStore } from '../store.jsx';
 import { SAMPLE_ORG } from '../data/sampleData.js';
 import { FOUR_W_LIST } from '../domain/fourW.js';
+import { EPIC_DOMAINS, EPIC_ORDER } from '../domain/epic.js';
+import { EpicChip } from '../components/ui.jsx';
 
 const ORG_TYPES = ['Nonprofit', 'Run club', 'School or PTA', 'Faith organization', 'Greek-letter organization', 'Employer / HR', 'Municipality / recreation', 'Veterans organization', 'Neighborhood association', 'Community health organization', 'Other'];
 const EXPERIENCE = [
@@ -19,19 +21,21 @@ export default function Onboarding() {
   const [perYear, setPerYear] = useState(1);
 
   const start = (next) => {
-    const org = name.trim()
-      ? { id: 'org-' + Date.now().toString(36), name: name.trim(), type, coordinator: coordinator.trim(), experience, eventsPerYear: Number(perYear) || 1, historicMembers: 0, membershipPerParticipant: 12 }
-      : SAMPLE_ORG;
-    dispatch({ type: 'setOrg', org });
+    if (name.trim()) {
+      const org = { id: 'org-' + Date.now().toString(36), name: name.trim(), type, coordinator: coordinator.trim(), experience, eventsPerYear: Number(perYear) || 1, historicMembers: 0, membershipPerParticipant: 12, tier: 'pro', trial: true, assistantEnabled: true, epicWeights: { E: 40, P: 20, I: 20, C: 20 } };
+      dispatch({ type: 'createOrg', org });
+    } else {
+      dispatch({ type: 'setSession', session: { orgId: SAMPLE_ORG.id, role: 'owner' } });
+    }
     navigate(next);
   };
 
   return (
     <div className="stack-lg fade-in">
       <section className="hero">
-        <div className="eyebrow">We Run These Streetz · EventOS</div>
+        <div className="eyebrow">EventOS · Developed and distributed by We Run These Streetz LLC</div>
         <h1>From idea <em>to impact</em></h1>
-        <p>Build your community event in one guided system. You bring the community. EventOS helps you build the experience, then shows you what it created.</p>
+        <p>The 4Ws define why your event matters. EPIC defines how it should run. EventOS makes both something you can plan, run, measure and repeat.</p>
         <div className="row" style={{ marginTop: 18 }}>
           <a className="btn btn-primary" href="#org-setup">Set up your organization</a>
           <button className="btn btn-secondary" onClick={() => start('home')}>Explore the demo</button>
@@ -98,6 +102,22 @@ export default function Onboarding() {
           </ul>
         </section>
       </div>
+
+      <section className="card stack">
+        <div>
+          <div className="eyebrow">EPIC operating framework</div>
+          <h2 className="display" style={{ fontSize: 30, marginTop: 4 }}>How every event should run</h2>
+        </div>
+        <div className="grid">
+          {EPIC_ORDER.map((d) => (
+            <div key={d} className="stack" style={{ gap: 4 }}>
+              <EpicChip id={d} long />
+              <span className="small muted">{EPIC_DOMAINS[d].summary}</span>
+            </div>
+          ))}
+        </div>
+        <p className="small muted">Every event uses all four EPIC areas, scaled to its size and risk. EventOS keeps operational readiness and community outcomes separate, so one never hides the other.</p>
+      </section>
 
       <section className="compare">
         <div className="old">

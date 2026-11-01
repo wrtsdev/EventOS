@@ -3,11 +3,12 @@ import Icon from '../components/Icon.jsx';
 import { phaseLabel } from '../components/ui.jsx';
 
 export default function More() {
-  const { state, navigate, dispatch } = useStore();
+  const { navigate, dispatch, events } = useStore();
   const links = [
+    ['settings', 'Settings and roles', 'tiers', 'Plan, assistant, EPIC weights, demo roles'],
     ['gateway', 'Integrations', 'plug', 'Registration, timing, HubSpot'],
     ['privacy', 'Privacy and consent', 'lock', 'How participant data is used'],
-    ['plans', 'Plans', 'tiers', 'Community, Growth, Partner, Managed'],
+    ['plans', 'Plans', 'flag', 'Community, Pro, Enterprise'],
   ];
   return (
     <div className="stack-lg fade-in">
@@ -16,8 +17,8 @@ export default function More() {
         <ul className="list-plain">
           {links.map(([v, l, i, d]) => (
             <li key={v}>
-              <button className="spread" style={{ width: '100%', background: 'none', border: 0, padding: '6px 0', cursor: 'pointer', textAlign: 'left' }} onClick={() => navigate(v)}>
-                <span className="row" style={{ gap: 12 }}><Icon name={i} /><span><strong>{l}</strong><span className="small muted" style={{ display: 'block' }}>{d}</span></span></span>
+              <button className="spread" style={{ width: '100%', background: 'none', border: 0, padding: '6px 0', cursor: 'pointer', textAlign: 'left', flexWrap: 'nowrap' }} onClick={() => navigate(v)}>
+                <span className="row" style={{ gap: 12, flexWrap: 'nowrap' }}><Icon name={i} /><span><strong>{l}</strong><span className="small muted" style={{ display: 'block' }}>{d}</span></span></span>
                 <Icon name="arrow" size={18} />
               </button>
             </li>
@@ -27,10 +28,10 @@ export default function More() {
       <section className="card">
         <h3 style={{ marginBottom: 8 }}>Your events</h3>
         <ul className="list-plain">
-          {state.events.map((e) => (
+          {events.map((e) => (
             <li key={e.id}>
-              <button className="spread" style={{ width: '100%', background: 'none', border: 0, padding: '4px 0', cursor: 'pointer', textAlign: 'left' }} onClick={() => navigate({ name: 'event', eventId: e.id, tab: 'overview' })}>
-                <span><strong>{e.name}</strong><span className="small muted" style={{ display: 'block' }}>{phaseLabel(e.phase)}</span></span>
+              <button className="spread" style={{ width: '100%', background: 'none', border: 0, padding: '4px 0', cursor: 'pointer', textAlign: 'left', flexWrap: 'nowrap' }} onClick={() => navigate({ name: 'event', eventId: e.id, tab: 'overview' })}>
+                <span><strong>{e.name}</strong><span className="small muted" style={{ display: 'block' }}>{phaseLabel(e.phase, e.status)}</span></span>
                 <Icon name="arrow" size={18} />
               </button>
             </li>

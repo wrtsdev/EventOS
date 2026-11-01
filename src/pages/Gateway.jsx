@@ -12,7 +12,7 @@ const CATEGORY_LABELS = {
   crm: 'CRM',
   'participant-app': 'Participant apps',
 };
-const STATUS_PILL = { connected: ['good', 'Connected'], available: ['neutral', 'Available'], planned: ['warn', 'Planned'] };
+const STATUS_PILL = { live: ['good', 'Live'], mock: ['warn', 'Demo adapter · sample data'], 'not-connected': ['neutral', 'Not connected'], planned: ['neutral', 'Planned'] };
 
 const BUILD_BUY = [
   ['Registration and payments', 'Integrate', 'Transactions are mature and commoditized.'],
@@ -26,10 +26,10 @@ const BUILD_BUY = [
 ];
 
 export default function Gateway() {
-  const { state } = useStore();
-  const event = state.events.find((e) => e.phase !== 'planning') ?? state.events[0];
+  const { events } = useStore();
+  const event = events.find((e) => e.phase !== 'planning') ?? events[0];
   const sim = useSim(event);
-  const hub = syncPreview(sim.participants, event);
+  const hub = sim ? syncPreview(sim.participants, event) : { total: 0, syncable: 0, withheld: 0, byAction: {} };
   const [imported, setImported] = useState(null);
 
   const runImport = async () => {
@@ -76,7 +76,7 @@ export default function Gateway() {
             </Card>
           ))}
         </div>
-        <p className="small muted">Connected adapters in this prototype use mock data in each vendor’s own format. Replacing a mock with a live client does not change any screen.</p>
+        <p className="small muted">No connector in this prototype talks to a real service. Demo adapters return sample data in each vendor’s own format so normalization is real; replacing one with a live client does not change any screen.</p>
       </section>
 
       <Card title="See normalization work" aside={<button className="btn btn-primary btn-sm" onClick={runImport}>Run sample import</button>}>
@@ -115,7 +115,7 @@ export default function Gateway() {
             </table>
           </div>
         </Card>
-        <Card title={`Sync preview · ${event.name}`}>
+        <Card title={`Sync preview${event ? ' · ' + event.name : ''}`}>
           <dl className="kv">
             <dt>Participants</dt><dd>{hub.total}</dd>
             <dt>Ready to sync (opted in)</dt><dd>{hub.syncable}</dd>

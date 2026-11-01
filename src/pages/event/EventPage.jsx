@@ -38,7 +38,7 @@ export default function EventPage({ event, sim }) {
           )}
 
           <div className="row">
-            <button className="btn btn-primary" disabled={event.phase === 'complete'} onClick={() => dispatch({ type: 'toast', message: 'Registration opens in your connected provider (prototype)' })}>
+            <button className="btn btn-primary" disabled={event.phase === 'complete'} onClick={() => dispatch({ type: 'toast', message: 'Prototype: registration would open in your registration provider' })}>
               {event.phase === 'complete' ? 'This event has happened' : `Register · ${Number(event.price) ? formatMoney(event.price) : 'Free'}`}
             </button>
             <button className="btn btn-secondary" onClick={() => dispatch({ type: 'toast', message: 'Passport sign-in would prefill your details (prototype)' })}>Join with your WRTS Passport</button>

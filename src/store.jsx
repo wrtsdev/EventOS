@@ -1,29 +1,38 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react';
-import { SAMPLE_EVENTS, SAMPLE_ORG, SAMPLE_PASSPORT } from './data/sampleData.js';
+import { SAMPLE_EVENTS, SAMPLE_ORG, SAMPLE_ORGS, SAMPLE_PASSPORT, SAMPLE_SNAPSHOTS } from './data/sampleData.js';
 import { simulateEvent } from './domain/simulate.js';
+import { migrateState, SCHEMA_VERSION } from './domain/migrate.js';
+import { can, eventsForSession, getEventForSession, snapshotsForSession } from './domain/access.js';
 
-const KEY = 'wrts-eventos:v1';
+const KEY_V2 = 'wrts-eventos:v2';
+const KEY_V1 = 'wrts-eventos:v1';
 
-// Storage is a per-browser convenience for the prototype. In production this is
-// the multi-tenant API; nothing here is the system of record.
+// Browser storage is a per-device convenience for the prototype. It is not the
+// system of record; production uses the multi-tenant API described in
+// docs/EPIC_EXPANSION.md.
+const DEFAULTS = { orgs: SAMPLE_ORGS, events: SAMPLE_EVENTS, passport: SAMPLE_PASSPORT, snapshots: SAMPLE_SNAPSHOTS };
+
 function load() {
   try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? JSON.parse(raw) : null;
+    const v2 = localStorage.getItem(KEY_V2);
+    if (v2) return migrateState(JSON.parse(v2), DEFAULTS);
+    const v1 = localStorage.getItem(KEY_V1);
+    if (v1) return migrateState(JSON.parse(v1), DEFAULTS);
   } catch {
-    return null;
+    /* unreadable: start fresh */
   }
+  return null;
 }
 function save(state) {
   try {
-    const { org, events, passport } = state;
-    localStorage.setItem(KEY, JSON.stringify({ org, events, passport }));
+    const { orgs, session, events, passport, snapshots } = state;
+    localStorage.setItem(KEY_V2, JSON.stringify({ schemaVersion: SCHEMA_VERSION, orgs, session, events, passport, snapshots }));
   } catch {
     /* storage unavailable: keep working in memory */
   }
 }
 
-const VIEWS = ['home', 'builder', 'passport', 'copilot', 'gateway', 'plans', 'privacy'];
+const VIEWS = ['home', 'builder', 'passport', 'copilot', 'gateway', 'plans', 'privacy', 'settings'];
 
 function initialView() {
   try {
@@ -38,35 +47,68 @@ function initialView() {
 function init() {
   const saved = load();
   return {
-    org: saved?.org ?? null,
-    events: saved?.events ?? SAMPLE_EVENTS,
-    passport: saved?.passport ?? SAMPLE_PASSPORT,
+    schemaVersion: SCHEMA_VERSION,
+    orgs: saved?.orgs ?? DEFAULTS.orgs,
+    session: saved?.session ?? null,
+    events: saved?.events ?? DEFAULTS.events,
+    passport: saved?.passport ?? DEFAULTS.passport,
+    snapshots: saved?.snapshots ?? DEFAULTS.snapshots,
     view: initialView(),
     toast: null,
   };
 }
 
+/** Permission needed to change a checklist control, by EPIC domain. */
+export function permForControl(epic) {
+  return epic === 'E' ? 'finance.edit' : epic === 'P' ? 'safety.edit' : 'event.edit';
+}
+
+function denied(state, msg = 'Your role cannot make this change') {
+  return { ...state, toast: msg };
+}
+
 function reducer(state, action) {
+  const role = state.session?.role;
   switch (action.type) {
-    case 'setOrg':
-      return { ...state, org: action.org };
+    case 'createOrg':
+      return { ...state, orgs: [...state.orgs, action.org], session: { orgId: action.org.id, role: 'owner' } };
+    case 'setSession':
+      return { ...state, session: action.session, view: { name: 'home' } };
+    case 'setRole':
+      return { ...state, session: { ...state.session, role: action.role } };
+    case 'updateOrg': {
+      if (!can(role, action.perm ?? 'org.admin')) return denied(state);
+      return { ...state, orgs: state.orgs.map((o) => (o.id === state.session.orgId ? { ...o, ...action.patch } : o)) };
+    }
     case 'navigate':
       return { ...state, view: action.view };
-    case 'addEvent':
-      return { ...state, events: [action.event, ...state.events], view: { name: 'event', eventId: action.event.id, tab: 'blueprint' } };
-    case 'updateEvent':
-      return { ...state, events: state.events.map((e) => (e.id === action.id ? { ...e, ...action.patch } : e)) };
-    case 'setChecklist':
-      return {
-        ...state,
-        events: state.events.map((e) => (e.id === action.id ? { ...e, checklist: { ...e.checklist, [action.item]: action.status } } : e)),
-      };
+    case 'addEvent': {
+      if (!can(role, 'event.edit')) return denied(state);
+      const event = { ...action.event, organizationId: state.session.orgId };
+      return { ...state, events: [event, ...state.events], view: { name: 'event', eventId: event.id, tab: action.tab ?? 'charter' } };
+    }
+    case 'updateEvent': {
+      const e = getEventForSession(state, state.session, action.id);
+      if (!e) return denied(state, 'Event not found');
+      if (!can(role, action.perm ?? 'event.edit')) return denied(state);
+      const patch = typeof action.patch === 'function' ? action.patch(e) : action.patch;
+      if ('organizationId' in patch && patch.organizationId !== e.organizationId) return denied(state);
+      return { ...state, events: state.events.map((x) => (x.id === action.id ? { ...x, ...patch } : x)), toast: action.toast ?? state.toast };
+    }
+    case 'setChecklist': {
+      const e = getEventForSession(state, state.session, action.id);
+      if (!e) return denied(state, 'Event not found');
+      if (!can(role, permForControl(action.epic))) return denied(state, 'Your role cannot update this control');
+      return { ...state, events: state.events.map((x) => (x.id === action.id ? { ...x, checklist: { ...x.checklist, [action.item]: action.status } } : x)) };
+    }
+    case 'addSnapshot':
+      return { ...state, snapshots: [...state.snapshots.filter((s) => s.id !== action.snapshot.id), action.snapshot] };
     case 'setPassportPrivacy':
       return { ...state, passport: { ...state.passport, privacy: { ...state.passport.privacy, ...action.patch } } };
     case 'toast':
       return { ...state, toast: action.message };
     case 'reset':
-      return { org: null, events: SAMPLE_EVENTS, passport: SAMPLE_PASSPORT, view: { name: 'home' }, toast: 'Demo data restored' };
+      return { ...init(), orgs: DEFAULTS.orgs, events: DEFAULTS.events, passport: DEFAULTS.passport, snapshots: DEFAULTS.snapshots, session: null, view: { name: 'home' }, toast: 'Demo data restored' };
     default:
       return state;
   }
@@ -77,11 +119,11 @@ const Ctx = createContext(null);
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, init);
 
-  useEffect(() => save(state), [state.org, state.events, state.passport]);
+  useEffect(() => save(state), [state.orgs, state.session, state.events, state.passport, state.snapshots]);
 
   useEffect(() => {
     if (!state.toast) return undefined;
-    const t = setTimeout(() => dispatch({ type: 'toast', message: null }), 2600);
+    const t = setTimeout(() => dispatch({ type: 'toast', message: null }), 2800);
     return () => clearTimeout(t);
   }, [state.toast]);
 
@@ -94,7 +136,20 @@ export function StoreProvider({ children }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ state, dispatch, navigate }), [state, navigate]);
+  const value = useMemo(() => {
+    const org = state.orgs.find((o) => o.id === state.session?.orgId) ?? null;
+    const role = state.session?.role ?? 'owner';
+    return {
+      state,
+      dispatch,
+      navigate,
+      org,
+      role,
+      can: (perm) => can(role, perm),
+      events: eventsForSession(state, state.session),
+      snapshots: snapshotsForSession(state, state.session),
+    };
+  }, [state, navigate]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -106,12 +161,12 @@ export function useStore() {
 
 export function useEvent(id) {
   const { state } = useStore();
-  return state.events.find((e) => e.id === id) ?? null;
+  return getEventForSession(state, state.session, id);
 }
 
 /** Simulated live data for an event; memoized on the event object. */
 export function useSim(event) {
-  const { state } = useStore();
-  const org = state.org ?? SAMPLE_ORG;
-  return useMemo(() => (event ? simulateEvent(event, org) : null), [event, org]);
+  const { org } = useStore();
+  const o = org ?? SAMPLE_ORG;
+  return useMemo(() => (event ? simulateEvent(event, o) : null), [event, o]);
 }

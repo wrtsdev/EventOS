@@ -1,3 +1,8 @@
+// Connector registry. Status is stated honestly:
+//   live          connected to the real service (none in this prototype)
+//   mock          demo adapter returning sample data in the vendor's format
+//   not-connected adapter contract exists; no client yet
+//   planned       on the roadmap
 // Connector registry with mock adapters. Each mock returns data in the
 // vendor's own shape so normalization is exercised the same way a real
 // connector would be. Swap a mock for a live client without touching UI code.
@@ -14,7 +19,7 @@ export const runSignup = defineAdapter({
   id: 'runsignup',
   name: 'RunSignup',
   category: 'registration',
-  status: 'connected',
+  status: 'mock',
   capabilities: ['Import registrations', 'Import teams', 'Import donations', 'Webhook on new registration'],
   async fetchRaw() {
     return [
@@ -44,7 +49,7 @@ export const raceRoster = defineAdapter({
   id: 'raceroster',
   name: 'Race Roster',
   category: 'registration',
-  status: 'connected',
+  status: 'mock',
   capabilities: ['Import registrations', 'Import fundraising', 'Import custom questions'],
   async fetchRaw() {
     return [
@@ -74,7 +79,7 @@ export const genericTiming = defineAdapter({
   id: 'timing-csv',
   name: 'Timing provider (CSV / API)',
   category: 'timing',
-  status: 'available',
+  status: 'mock',
   capabilities: ['Import results by bib', 'Match bibs to participants'],
   async fetchRaw() {
     return [{ bib: '1042', registration_ref: 'p-rsu-88123', chip_time: '00:37:48', status: 'FIN' }];
@@ -85,7 +90,7 @@ export const genericTiming = defineAdapter({
   },
 });
 
-const planned = (id, name, category, capabilities, status = 'available') =>
+const planned = (id, name, category, capabilities, status = 'not-connected') =>
   defineAdapter({ id, name, category, status, capabilities });
 
 export const ADAPTERS = [
@@ -98,7 +103,7 @@ export const ADAPTERS = [
   planned('other-registration', 'Other registration (CSV)', 'registration', ['Upload a spreadsheet of registrants']),
   genericTiming,
   planned('givebutter', 'Fundraising platform', 'fundraising', ['Import pages and gifts'], 'planned'),
-  planned('hubspot', 'HubSpot', 'crm', ['Export participants', 'Sync lists and properties', 'Trigger workflows'], 'connected'),
+  planned('hubspot', 'HubSpot', 'crm', ['Export participants', 'Sync lists and properties', 'Trigger workflows'], 'mock'),
   planned('strava', 'Fitness apps (Strava, Apple Health)', 'participant-app', ['Import logged miles for virtual events'], 'planned'),
 ];
 
@@ -110,7 +115,7 @@ export function adaptersByCategory() {
 
 /** Pull and normalize every connected registration source. */
 export async function importRegistrations(adapters = ADAPTERS) {
-  const sources = adapters.filter((a) => a.category === 'registration' && a.status === 'connected' && a.fetchRaw);
+  const sources = adapters.filter((a) => a.category === 'registration' && (a.status === 'mock' || a.status === 'live') && a.fetchRaw);
   const batches = await Promise.all(
     sources.map(async (a) => (await a.fetchRaw()).map((raw) => ({ raw, canonical: a.normalize(raw), source: a.id }))),
   );
