@@ -1,5 +1,6 @@
 import { useStore } from './store.jsx';
 import Icon from './components/Icon.jsx';
+import { BrandLockup } from './components/Brand.jsx';
 import Onboarding from './pages/Onboarding.jsx';
 import Home from './pages/Home.jsx';
 import Builder from './pages/Builder.jsx';
@@ -53,9 +54,8 @@ export default function App() {
   return (
     <div className="shell">
       <aside className="sidebar" aria-label="Organizer navigation">
-        <button className="brand" onClick={() => navigate('home')}>
-          <span className="brand-mark">WRTS</span>
-          <span className="brand-sub">EventOS</span>
+        <button className="brand" onClick={() => navigate('home')} aria-label="EventOS home">
+          <BrandLockup variant="primary" />
         </button>
         {org && (
           <nav className="side-nav">
@@ -94,9 +94,8 @@ export default function App() {
       </aside>
 
       <header className="topbar">
-        <button className="brand" onClick={() => navigate('home')}>
-          <span className="brand-mark">WRTS</span>
-          <span className="brand-sub">EventOS</span>
+        <button className="brand" onClick={() => navigate('home')} aria-label="EventOS home">
+          <BrandLockup variant="wordmark" />
         </button>
         <span className="org-chip">{org ? `${org.name} · ${ROLES[role]?.label ?? role}` : 'Move Forward Together'}</span>
       </header>

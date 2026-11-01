@@ -4,6 +4,7 @@ import { SAMPLE_ORG } from '../data/sampleData.js';
 import { FOUR_W_LIST } from '../domain/fourW.js';
 import { EPIC_DOMAINS, EPIC_ORDER } from '../domain/epic.js';
 import { EpicChip } from '../components/ui.jsx';
+import { BrandHero } from '../components/Brand.jsx';
 
 const ORG_TYPES = ['Nonprofit', 'Run club', 'School or PTA', 'Faith organization', 'Greek-letter organization', 'Employer / HR', 'Municipality / recreation', 'Veterans organization', 'Neighborhood association', 'Community health organization', 'Other'];
 const EXPERIENCE = [
@@ -33,6 +34,7 @@ export default function Onboarding() {
   return (
     <div className="stack-lg fade-in">
       <section className="hero">
+        <BrandHero />
         <div className="eyebrow">EventOS · Developed and distributed by We Run These Streetz LLC</div>
         <h1>From idea <em>to impact</em></h1>
         <p>The 4Ws define why your event matters. EPIC defines how it should run. EventOS makes both something you can plan, run, measure and repeat.</p>
