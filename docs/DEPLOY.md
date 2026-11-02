@@ -6,6 +6,9 @@ EventOS production is one Node.js process (`server/index.js`) that serves the AP
 
 - App type: Node.js, Express. Entry file `server/index.js`. Build command `npm run build`. Node 22.
 - Deployed from GitHub `wrtsdev/EventOS`; pushes to the deployed branch redeploy automatically.
+- Leave the output directory empty: the whole project is the app, and the server serves `dist/` itself.
+- Hostinger's runner loads `server/index.js` with `require()`, so the entry file must not use top-level `await`.
+- Don't ship an `.htaccess` in `public/`: it would replace Hostinger's routing to the Node app (403/404).
 - Database: created with Hostinger's website database setup, which writes `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` and `DATABASE_URL`. The app connects to `127.0.0.1`. Tables are created and upgraded automatically on start (`server/migrations`).
 
 ## Environment variables
