@@ -3,7 +3,7 @@ import Icon from '../components/Icon.jsx';
 import { phaseLabel } from '../components/ui.jsx';
 
 export default function More() {
-  const { navigate, dispatch, events } = useStore();
+  const { navigate, dispatch, events, isLive, me, signOut, state } = useStore();
   const links = [
     ['settings', 'Settings and roles', 'tiers', 'Plan, assistant, EPIC weights, demo roles'],
     ['gateway', 'Integrations', 'plug', 'Registration, timing, HubSpot'],
@@ -38,7 +38,17 @@ export default function More() {
           ))}
         </ul>
       </section>
-      <button className="btn btn-secondary" onClick={() => dispatch({ type: 'reset' })}>Reset demo data</button>
+      {isLive ? (
+        <section className="card stack" style={{ gap: 8 }}>
+          <span className="small muted">Signed in as {me?.user?.email}</span>
+          <button className="btn btn-secondary" onClick={signOut}>Sign out</button>
+        </section>
+      ) : (
+        <div className="stack" style={{ gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => dispatch({ type: 'reset' })}>Reset demo data</button>
+          {state.hasServer && <button className="btn btn-primary" onClick={() => dispatch({ type: 'signedOut' })}>Exit demo · Sign in or create your organization</button>}
+        </div>
+      )}
     </div>
   );
 }
