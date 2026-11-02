@@ -117,7 +117,10 @@ function Organizer() {
           <div style={{ marginTop: 8 }}>
             {isLive
               ? <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ice)', paddingLeft: 0 }} onClick={signOut}>Sign out</button>
-              : <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ice)', paddingLeft: 0 }} onClick={() => dispatch({ type: 'reset' })}>Reset demo</button>}
+              : <>
+                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ice)', paddingLeft: 0 }} onClick={() => dispatch({ type: 'reset' })}>Reset demo</button>
+                  {state.hasServer && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ice)' }} onClick={() => dispatch({ type: 'signedOut' })}>Exit demo · Sign in</button>}
+                </>}
           </div>
           <p className="foot-brand">EventOS · Developed and distributed by We Run These Streetz LLC</p>
         </div>

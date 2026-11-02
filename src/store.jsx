@@ -75,8 +75,12 @@ function denied(state, msg = 'Your role cannot make this change') {
 function reducer(state, action) {
   const role = state.session?.role;
   switch (action.type) {
-    case 'startDemo':
-      return { ...state, ...demoState(), view: { name: 'home' } };
+    case 'startDemo': {
+      const demo = demoState();
+      // From the sign-in screen, go straight into the sample organization.
+      const session = demo.session ?? (state.hasServer ? { orgId: SAMPLE_ORG.id, role: 'owner' } : null);
+      return { ...state, ...demo, session, view: { name: 'home' } };
+    }
     case 'server':
       return { ...state, server: action.server };
     case 'signedOut':

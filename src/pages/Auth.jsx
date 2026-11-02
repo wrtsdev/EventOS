@@ -30,7 +30,7 @@ function Field({ id, label, type = 'text', value, onChange, autoComplete, hint }
 }
 
 export default function Auth() {
-  const { state, refresh } = useStore();
+  const { state, refresh, startDemo } = useStore();
   const signupOpen = state.server?.signupOpen !== false;
   const resetToken = hashParam('reset');
   const inviteToken = hashParam('invite');
@@ -131,6 +131,12 @@ export default function Auth() {
           {mode !== 'signin' && mode !== 'invite' && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { clearHash(); setMode('signin'); }}>Back to sign in</button>}
         </div>
         {mode === 'signin' && !signupOpen && <p className="small muted">New organizations join by invitation. Contact We Run These Streetz to get set up.</p>}
+        {mode === 'signin' && (
+          <div className="info small stack" style={{ gap: 8 }}>
+            <span><strong>Just looking?</strong> Try EventOS with a sample organization and events. Nothing you do in the demo is saved to an account.</span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={startDemo}>Explore the demo</button>
+          </div>
+        )}
       </form>
     </div>
   );
