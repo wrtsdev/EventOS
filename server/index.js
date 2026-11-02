@@ -7,7 +7,8 @@ import { log } from './log.js';
 
 process.on('unhandledRejection', (e) => log.error('unhandled rejection', { error: String(e?.stack || e) }));
 
-try {
+// No top-level await: Hostinger's LiteSpeed runner loads this file with require().
+async function main() {
   const cfg = loadConfig();
   const pool = createPool(cfg.db);
   const db = makeDb(pool);
@@ -16,7 +17,9 @@ try {
   const mailer = createMailer(cfg);
   const app = createApp({ db, cfg, mailer });
   app.listen(cfg.port, () => log.info('EventOS started', { port: cfg.port, mode: cfg.isProd ? 'production' : 'development', mail: mailer.configured ? 'configured' : 'not configured', publicUrl: cfg.publicUrl }));
-} catch (e) {
-  log.error('EventOS failed to start', { error: String(e?.message || e) });
-  process.exit(1);
 }
+
+main().catch((e) => {
+  log.error('EventOS failed to start', { error: String(e?.stack || e?.message || e) });
+  process.exit(1);
+});
