@@ -17,6 +17,10 @@ export function createApp({ db, cfg, mailer, fetchImpl }) {
   app.disable('x-powered-by');
   app.set('trust proxy', 1); // Hostinger terminates TLS in front of the app
 
+  if (cfg.isProd) {
+    // Hostinger terminates TLS in front of the app; send plain-HTTP visitors to HTTPS.
+    app.use((req, res, next) => (req.headers['x-forwarded-proto'] === 'http' ? res.redirect(301, `https://${req.headers.host}${req.originalUrl}`) : next()));
+  }
   app.use(securityHeaders);
   // Raw body for webhook signature checks; JSON for everything else.
   app.use('/api/webhooks', express.text({ type: '*/*', limit: '1mb' }), (req, res, next) => {
