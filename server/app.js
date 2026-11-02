@@ -1,3 +1,4 @@
+import { log } from './log.js';
 import express from 'express';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -58,7 +59,7 @@ export function createApp({ db, cfg, mailer, fetchImpl }) {
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     const status = err.status && err.status < 600 ? err.status : 500;
-    if (status >= 500) console.error(err);
+    if (status >= 500) log.error('request failed', { path: req.path, error: String(err?.stack || err) });
     res.status(status).json({ error: status >= 500 && status !== 502 ? 'Something went wrong. Try again.' : err.message });
   });
 

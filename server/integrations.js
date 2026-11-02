@@ -1,4 +1,5 @@
 // Per-organization integrations: Stripe, RunSignup, HubSpot. Secrets are
+import { log } from './log.js';
 // encrypted at rest and never returned to the browser.
 
 import { Router } from 'express';
@@ -212,7 +213,7 @@ export function webhookRouter(db, cfg) {
       else if (['checkout.session.expired', 'checkout.session.async_payment_failed'].includes(evt.type)) await db.query("UPDATE registrations SET payment_status = 'failed' WHERE id = :id AND organization_id = :o AND payment_status = 'pending'", scope);
       res.json({ received: true });
     } catch (e) {
-      console.error('stripe webhook error', e.message);
+      log.error('stripe webhook error', { error: e.message });
       res.status(500).send('error');
     }
   });

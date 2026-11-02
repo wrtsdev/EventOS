@@ -3,13 +3,20 @@ import { loadConfig } from './config.js';
 import { createPool, makeDb, migrate } from './db.js';
 import { createApp } from './app.js';
 import { createMailer } from './mailer.js';
+import { log } from './log.js';
 
-const cfg = loadConfig();
-const pool = createPool(cfg.db);
-const db = makeDb(pool);
+process.on('unhandledRejection', (e) => log.error('unhandled rejection', { error: String(e?.stack || e) }));
 
-await migrate(pool);
-await db.query('DELETE FROM sessions WHERE expires_at < UTC_TIMESTAMP()');
-
-const app = createApp({ db, cfg, mailer: createMailer(cfg) });
-app.listen(cfg.port, () => console.log(`EventOS listening on ${cfg.port} (${cfg.isProd ? 'production' : 'development'})`));
+try {
+  const cfg = loadConfig();
+  const pool = createPool(cfg.db);
+  const db = makeDb(pool);
+  await migrate(pool);
+  await db.query('DELETE FROM sessions WHERE expires_at < UTC_TIMESTAMP()');
+  const mailer = createMailer(cfg);
+  const app = createApp({ db, cfg, mailer });
+  app.listen(cfg.port, () => log.info('EventOS started', { port: cfg.port, mode: cfg.isProd ? 'production' : 'development', mail: mailer.configured ? 'configured' : 'not configured', publicUrl: cfg.publicUrl }));
+} catch (e) {
+  log.error('EventOS failed to start', { error: String(e?.message || e) });
+  process.exit(1);
+}
