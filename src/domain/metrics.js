@@ -95,5 +95,6 @@ export function formatMoney(n, { compact = false } = {}) {
 }
 
 export function pct(n, digits = 0) {
+  if (n == null || Number.isNaN(n)) return '—';
   return (n * 100).toFixed(digits) + '%';
 }

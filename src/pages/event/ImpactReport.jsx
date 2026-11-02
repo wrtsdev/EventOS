@@ -53,7 +53,7 @@ export default function ImpactReport({ event, sim, setTab }) {
     ['Repeat participants', sim.returning],
     ['First-time participants', sim.firstTime],
     ['Referrals', sim.referrals],
-    ['Satisfaction', `${sim.impact.avgSatisfaction.toFixed(1)} / 5`],
+    ['Satisfaction', sim.impact.avgSatisfaction != null ? `${sim.impact.avgSatisfaction.toFixed(1)} / 5` : 'No survey yet'],
   ];
   const said = sim.feedback.slice(0, 5);
 

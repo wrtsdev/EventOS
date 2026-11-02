@@ -6,6 +6,8 @@ import { hasFeature, tierNeeded } from '../domain/access.js';
 import { TIERS } from '../domain/catalog.js';
 import { SAFETY_NOTE } from '../copilot/engine.js';
 import Icon from './Icon.jsx';
+import { useContext } from 'react';
+import { StoreContext } from '../store.jsx';
 
 export function Ring({ value, max = 100, size = 112, stroke = 11, label, caption, tone }) {
   const r = (size - stroke) / 2;
@@ -81,6 +83,9 @@ export function AssistantTag() {
 }
 
 export function DemoTag({ children = 'Demo data' }) {
+  // Live organizations see real data, so the demo label is hidden for them.
+  const store = useContext(StoreContext);
+  if (store?.isLive) return null;
   return <span className="demo-tag">{children}</span>;
 }
 

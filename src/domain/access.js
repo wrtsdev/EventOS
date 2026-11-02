@@ -15,13 +15,14 @@ export const PERMISSIONS = {
   'workforce.edit': 'Manage volunteers, staff and contractors',
   'partners.edit': 'Manage partners, sponsors and outcomes',
   'reports.view': 'See reports and scorecards',
+  'participants.view': 'See participant names and contact details',
   'epic.configure': 'Change EPIC score weights',
   'org.admin': 'Manage users, plan and settings',
 };
 
 export const ROLES = {
   owner: { label: 'Organization owner', perms: Object.keys(PERMISSIONS) },
-  coordinator: { label: 'Event coordinator', perms: ['event.edit', 'finance.view', 'finance.edit', 'safety.edit', 'incidents.view', 'incidents.edit', 'comms.approve', 'workforce.edit', 'partners.edit', 'reports.view'] },
+  coordinator: { label: 'Event coordinator', perms: ['event.edit', 'participants.view', 'finance.view', 'finance.edit', 'safety.edit', 'incidents.view', 'incidents.edit', 'comms.approve', 'workforce.edit', 'partners.edit', 'reports.view'] },
   finance: { label: 'Finance lead', perms: ['finance.view', 'finance.edit', 'reports.view'] },
   safety: { label: 'Safety lead', perms: ['safety.edit', 'incidents.view', 'incidents.edit', 'reports.view'] },
   volunteer: { label: 'Volunteer lead', perms: ['workforce.edit', 'reports.view'] },

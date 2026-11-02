@@ -5,15 +5,16 @@ import { SAMPLE_ZIPS } from '../../domain/simulate.js';
 import { fulfillment, packageInventory } from '../../domain/sponsors.js';
 import { Card, Stat, Gate, DemoTag } from '../../components/ui.jsx';
 
+const nt = (v, f = (x) => x) => (v == null ? 'Not tracked yet' : f(v));
 const ROWS = [
-  ['Impressions', (s) => s.impressions.toLocaleString()],
-  ['Clicks', (s) => s.clicks],
-  ['Registrations attributed', (s) => s.registrations],
-  ['Promo code uses', (s) => s.promoRedemptions],
-  ['Booth interactions', (s) => s.boothVisits || '—'],
+  ['Impressions', (s) => nt(s.impressions, (v) => v.toLocaleString())],
+  ['Clicks', (s) => nt(s.clicks)],
+  ['Registrations attributed', (s) => nt(s.registrations)],
+  ['Promo code uses', (s) => nt(s.promoRedemptions)],
+  ['Booth interactions', (s) => nt(s.boothVisits, (v) => v || '—')],
   ['Survey recall', (s) => (s.surveyRecall != null ? pct(s.surveyRecall) : 'After event')],
-  ['Referrals', (s) => s.referrals],
-  ['Geographic reach', (s) => `${s.zipsReached} of ${SAMPLE_ZIPS.length} ZIPs`],
+  ['Referrals', (s) => nt(s.referrals)],
+  ['Geographic reach', (s) => nt(s.zipsReached, (v) => `${v} of ${SAMPLE_ZIPS.length} ZIPs`)],
   ['Cause impact', (s) => (s.causeImpact ? `${formatMoney(s.causeImpact)} matched` : '—')],
 ];
 const STATUS_NEXT = { pending: 'delivered', delivered: 'missed', missed: 'pending' };
@@ -106,7 +107,7 @@ export default function SponsorOS({ event, sim }) {
                 <thead><tr><th>Sponsor</th><th className="r">Investment</th><th className="r">Engaged people</th><th className="r">Cost per engaged</th></tr></thead>
                 <tbody>
                   {sim.sponsors.map((s) => {
-                    const engaged = s.boothVisits + s.registrations + s.promoRedemptions;
+                    const engaged = (s.boothVisits ?? 0) + (s.registrations ?? 0) + (s.promoRedemptions ?? 0);
                     return <tr key={s.id}><td>{s.name}</td><td className="r">{formatMoney(s.amount)}</td><td className="r">{engaged}</td><td className="r">{engaged ? formatMoney(s.amount / engaged) : '—'}</td></tr>;
                   })}
                 </tbody>

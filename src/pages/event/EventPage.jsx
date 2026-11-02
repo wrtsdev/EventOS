@@ -5,7 +5,16 @@ import { formatMoney } from '../../domain/metrics.js';
 import { WChip, formatDate, Progress } from '../../components/ui.jsx';
 
 export default function EventPage({ event, sim }) {
-  const { dispatch } = useStore();
+  const { dispatch, isLive, can } = useStore();
+  const publicUrl = event.slug ? `${location.origin}/e/${event.slug}` : null;
+  const copy = () => {
+    try {
+      navigator.clipboard.writeText(publicUrl);
+      dispatch({ type: 'toast', message: 'Link copied' });
+    } catch {
+      /* ignore */
+    }
+  };
   const type = getEventType(event.typeId);
   const ws = event.fourWs ?? [];
   const prog = (event.programming ?? [])
@@ -16,7 +25,30 @@ export default function EventPage({ event, sim }) {
 
   return (
     <div className="stack-lg">
-      <div className="info small">This is what participants see. It is mobile-first and can be published as a public page or embedded on your site.</div>
+      {isLive ? (
+        <div className="card stack" style={{ gap: 10 }}>
+          <div className="spread">
+            <div>
+              <strong>Public registration page</strong>
+              <div className="small muted">{event.isPublic ? 'Published. Anyone with the link can view it.' : 'Not published. Only your team can see this preview.'}</div>
+            </div>
+            {can('event.edit') && (
+              <button className={`btn btn-sm ${event.isPublic ? 'btn-ghost' : 'btn-primary'}`} onClick={() => dispatch({ type: 'updateEvent', id: event.id, patch: { isPublic: !event.isPublic }, toast: event.isPublic ? 'Event page unpublished' : 'Event page published' })}>
+                {event.isPublic ? 'Unpublish' : 'Publish page'}
+              </button>
+            )}
+          </div>
+          {event.isPublic && publicUrl && (
+            <div className="row" style={{ gap: 6 }}>
+              <a className="small" href={publicUrl} target="_blank" rel="noreferrer" style={{ wordBreak: 'break-all' }}>{publicUrl}</a>
+              <button className="btn btn-ghost btn-sm" onClick={copy}>Copy link</button>
+            </div>
+          )}
+          {event.isPublic && event.phase !== 'live' && <div className="small muted">Registration opens on this page when you move the event to “Open registration”.</div>}
+        </div>
+      ) : (
+        <div className="info small">This is what participants see. It is mobile-first and can be published as a public page or embedded on your site.</div>
+      )}
       <article style={{ maxWidth: 640, width: '100%', margin: '0 auto', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', background: 'var(--surface)' }}>
         <div className="hero" style={{ borderRadius: 0 }}>
           <div className="eyebrow">{event.organization} presents</div>

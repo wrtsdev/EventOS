@@ -20,7 +20,7 @@ const OPS = [
 ];
 
 export default function CommandCenter({ event, sim, setTab }) {
-  const { dispatch, org, can } = useStore();
+  const { dispatch, org, can, isLive } = useStore();
   const r = useMemo(() => readiness(event, sim), [event, sim]);
   const score = useMemo(() => epicScore(event, sim, org), [event, sim, org]);
   const fin = useMemo(() => financeView(event, sim), [event, sim]);
@@ -32,7 +32,7 @@ export default function CommandCenter({ event, sim, setTab }) {
   const attention = [
     ...score.critical.map((c) => ({ tone: 'bad', text: `${c.title}: ${c.detail.toLowerCase()}`, tab: c.kind === 'finance' ? 'finance' : c.kind === 'control' ? 'blueprint' : 'safety' })),
     ...fin.flags.filter((f) => f.severity === 'warn').map((f) => ({ tone: 'warn', text: f.title, tab: 'finance' })),
-    ...(event.phase === 'live' && sim.registered / sim.goal < 0.8 ? [{ tone: 'warn', text: `Biggest registration drop: ${sim.leakFrom} → ${sim.leakStage}`, tab: 'intelligence' }] : []),
+    ...(event.phase === 'live' && sim.leakStage && sim.registered / sim.goal < 0.8 ? [{ tone: 'warn', text: `Biggest registration drop: ${sim.leakFrom} → ${sim.leakStage}`, tab: 'intelligence' }] : []),
     ...(event.phase === 'live' && sim.impact.volunteers < sim.impact.volunteersNeeded ? [{ tone: 'warn', text: `${sim.impact.volunteersNeeded - sim.impact.volunteers} more volunteers needed`, tab: 'workforce' }] : []),
     ...r.attention.slice(0, 3).map((i) => ({ tone: 'warn', text: `${i.label} needs attention`, tab: 'blueprint' })),
   ].slice(0, 7);
@@ -45,7 +45,7 @@ export default function CommandCenter({ event, sim, setTab }) {
         <Card title={complete ? 'How it went' : 'What requires attention'}>
           {complete ? (
             <div className="stack" style={{ gap: 10 }}>
-              <p>{sim.finishers} finishers, {sim.impact.volunteers} volunteers, {formatMoney(sim.impact.raised)} raised, average satisfaction {sim.impact.avgSatisfaction?.toFixed(1)} of 5.</p>
+              <p>{sim.finishers} finishers, {sim.impact.volunteers} volunteers, {formatMoney(sim.impact.raised)} raised, {sim.impact.avgSatisfaction != null ? `average satisfaction ${sim.impact.avgSatisfaction.toFixed(1)} of 5.` : 'no survey results yet.'}</p>
               <button className="btn btn-primary" style={{ alignSelf: 'flex-start' }} onClick={() => setTab('impact')}>Open the Impact Report <Icon name="arrow" size={16} /></button>
             </div>
           ) : attention.length ? (
@@ -80,13 +80,13 @@ export default function CommandCenter({ event, sim, setTab }) {
       <section className="stack">
         <h3 className="eyebrow">Registration</h3>
         {planning ? (
-          <div className="info">Registration has not opened. Goal: <strong>{sim.goal}</strong> participants. Use <strong>Open registration</strong> above to see synthetic registrations flow through the demo RunSignup and Race Roster adapters.</div>
+          <div className="info">Registration has not opened. Goal: <strong>{sim.goal}</strong> participants. {isLive ? <>Publish the event page, then use <strong>Open registration</strong> above to start taking sign-ups.</> : <>Use <strong>Open registration</strong> above to see synthetic registrations flow through the demo RunSignup and Race Roster adapters.</>}</div>
         ) : (
           <>
             <div className="grid-stats">
               <Stat label="Registered" value={sim.registered} sub={`Goal ${sim.goal}`} />
               <Stat label="Of goal" value={pct(sim.registered / sim.goal)} />
-              <Stat label="Page conversion" value={pct(sim.conversionRate, 1)} sub="Visitors who registered" />
+              <Stat label="Page conversion" value={sim.conversionRate == null ? '—' : pct(sim.conversionRate, 1)} sub={sim.conversionRate == null ? 'Page views not tracked yet' : 'Visitors who registered'} />
               <Stat label="Teams" value={sim.teams.length} sub={`${sim.engagement.teamRegistrations} people on teams`} />
             </div>
             <Card title="Registrations by week">
@@ -141,7 +141,7 @@ export default function CommandCenter({ event, sim, setTab }) {
         <Card title="Engagement">
           {planning ? <p className="muted small">Email, referral and team activity appear once registration opens.</p> : (
             <dl className="kv">
-              <dt>Emails sent</dt><dd>{sim.engagement.emailsSent}</dd>
+              <dt>Emails sent</dt><dd>{sim.engagement.emailsSent ?? 'Not tracked yet'}</dd>
               <dt>Open rate</dt><dd>{pct(sim.engagement.openRate)}</dd>
               <dt>Click rate</dt><dd>{pct(sim.engagement.clickRate)}</dd>
               <dt>Referral registrations</dt><dd>{sim.engagement.referralRegistrations}</dd>
@@ -160,7 +160,7 @@ export default function CommandCenter({ event, sim, setTab }) {
               <dt>Took a cause action</dt><dd>{sim.impact.causeParticipants}</dd>
               <dt>Volunteers</dt><dd>{sim.impact.volunteers} of {sim.impact.volunteersNeeded}</dd>
               <dt>Survey responses</dt><dd>{complete ? sim.impact.surveyResponses : 'After event'}</dd>
-              <dt>Average satisfaction</dt><dd>{complete ? sim.impact.avgSatisfaction.toFixed(1) + ' / 5' : 'After event'}</dd>
+              <dt>Average satisfaction</dt><dd>{complete ? (sim.impact.avgSatisfaction != null ? sim.impact.avgSatisfaction.toFixed(1) + ' / 5' : 'No survey yet') : 'After event'}</dd>
               <dt>Community resources accessed</dt><dd>{complete ? sim.impact.resourcesAccessed : 'After event'}</dd>
             </dl>
             <div>

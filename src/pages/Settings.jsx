@@ -4,12 +4,13 @@ import { ROLES, PERMISSIONS, hasFeature } from '../domain/access.js';
 import { TIERS } from '../domain/catalog.js';
 import { EPIC_ORDER, EPIC_DOMAINS, DEFAULT_WEIGHTS, weightsFor } from '../domain/epic.js';
 import { Card, EpicChip, Gate } from '../components/ui.jsx';
+import { TeamCard, IntegrationsCard, AuditCard } from './LiveAdmin.jsx';
 
 export default function Settings() {
-  const { org, role, dispatch, can, state } = useStore();
+  const { org, role, dispatch, can, state, isLive } = useStore();
   const [weights, setWeights] = useState(() => weightsFor(org).weights);
   const check = weightsFor({ epicWeights: weights });
-  const isDemo = Boolean(org?.isSample) || org?.trial;
+  const isDemo = !isLive && (Boolean(org?.isSample) || org?.trial);
 
   return (
     <div className="stack-lg fade-in">
@@ -18,7 +19,11 @@ export default function Settings() {
         <h1>Settings and roles</h1>
       </header>
 
-      <Card title="Who you are in this demo">
+      {isLive && <TeamCard />}
+      {isLive && <IntegrationsCard />}
+      {isLive && can('org.admin') && <AuditCard />}
+
+      {!isLive && <Card title="Who you are in this demo">
         <div className="stack" style={{ gap: 10 }}>
           <p className="small">Switch roles to see how EventOS limits what each person can see and change. In production, roles are assigned by the organization owner and enforced by the server.</p>
           <div className="field" style={{ maxWidth: 360 }}>
@@ -45,7 +50,7 @@ export default function Settings() {
           </div>
           <p className="small muted">Each organization sees only its own events, reports and history.</p>
         </div>
-      </Card>
+      </Card>}
 
       <Card title="Plan">
         <div className="stack" style={{ gap: 10 }}>

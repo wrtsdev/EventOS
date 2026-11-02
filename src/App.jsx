@@ -12,6 +12,8 @@ import Plans from './pages/Plans.jsx';
 import Privacy from './pages/Privacy.jsx';
 import Settings from './pages/Settings.jsx';
 import More from './pages/More.jsx';
+import Auth from './pages/Auth.jsx';
+import PublicEvent from './pages/PublicEvent.jsx';
 import { phaseTone } from './components/ui.jsx';
 import { ROLES } from './domain/access.js';
 
@@ -29,8 +31,9 @@ const NAV_2 = [
 ];
 
 function Page() {
-  const { state, org } = useStore();
+  const { state, org, isLive } = useStore();
   const v = state.view;
+  if (isLive && !org?.id) return <div className="card"><h2 className="display" style={{ fontSize: 26 }}>No organization yet</h2><p className="muted">Your account isn’t part of an organization. Ask an owner to invite you.</p></div>;
   if (!org) return <Onboarding />;
   switch (v.name) {
     case 'builder': return <Builder templateId={v.templateId} />;
@@ -46,8 +49,32 @@ function Page() {
   }
 }
 
+function publicSlug() {
+  try {
+    const m = location.pathname.match(/^\/e\/([A-Za-z0-9-]{1,120})\/?$/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
-  const { state, navigate, dispatch, org, role, events } = useStore();
+  const slug = publicSlug();
+  if (slug) return <PublicEvent slug={slug} />;
+  return <Organizer />;
+}
+
+function Organizer() {
+  const { state, navigate, dispatch, org, role, events, isLive, me, signOut } = useStore();
+  if (state.mode === 'starting') return <div className="auth-shell"><div className="public-wrap muted">Loading EventOS…</div></div>;
+  if (state.mode === 'signedOut') {
+    return (
+      <div className="auth-shell">
+        <Auth />
+        {state.toast && <div className="toast" role="status">{state.toast}</div>}
+      </div>
+    );
+  }
   const current = state.view.name;
   const dotColor = (e) => ({ good: 'var(--good)', warn: 'var(--warn)', bad: 'var(--bad)', neutral: 'var(--ice)' })[phaseTone(e.phase, e.status)];
 
@@ -86,8 +113,11 @@ export default function App() {
         <div className="side-foot">
           <strong>{org?.name ?? 'No organization yet'}</strong>
           {org ? `${ROLES[role]?.label ?? role}${org.isSample ? ' · demo' : ''}` : 'Set up on the home screen'}
+          {isLive && me?.user && <div className="small" style={{ opacity: 0.8 }}>{me.user.email}</div>}
           <div style={{ marginTop: 8 }}>
-            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ice)', paddingLeft: 0 }} onClick={() => dispatch({ type: 'reset' })}>Reset demo</button>
+            {isLive
+              ? <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ice)', paddingLeft: 0 }} onClick={signOut}>Sign out</button>
+              : <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ice)', paddingLeft: 0 }} onClick={() => dispatch({ type: 'reset' })}>Reset demo</button>}
           </div>
           <p className="foot-brand">EventOS · Developed and distributed by We Run These Streetz LLC</p>
         </div>

@@ -21,11 +21,12 @@ import Value from './event/Value.jsx';
 import ImpactReport from './event/ImpactReport.jsx';
 import AAR from './event/AAR.jsx';
 import EventPage from './event/EventPage.jsx';
+import Participants from './event/Participants.jsx';
 
 export const SECTIONS = [
   { id: 'overview', label: 'Overview', tabs: [['overview', 'Command Center']] },
   { id: 'plan', label: 'Plan', tabs: [['charter', 'Charter'], ['blueprint', 'Readiness']] },
-  { id: 'operations', label: 'Operations', tabs: [['safety', 'Safety'], ['workforce', 'Workforce'], ['eventday', 'Event day']] },
+  { id: 'operations', label: 'Operations', tabs: [['participants', 'Participants'], ['safety', 'Safety'], ['workforce', 'Workforce'], ['eventday', 'Event day']] },
   { id: 'commerce', label: 'Commerce', tabs: [['finance', 'Finance'], ['sponsors', 'Sponsors']] },
   { id: 'community', label: 'Community', tabs: [['civic', 'Partners and outcomes'], ['cause', 'Cause'], ['comms', 'Communications']] },
   { id: 'intel', label: 'EPIC Intelligence', tabs: [['scorecard', 'Scorecard'], ['intelligence', 'Community Intelligence'], ['value', 'Value']] },
@@ -45,7 +46,7 @@ function lifecycleStage(event) {
 }
 
 export default function EventWorkspace({ eventId, tab: rawTab = 'overview' }) {
-  const { navigate, dispatch, can } = useStore();
+  const { navigate, dispatch, can, isLive } = useStore();
   const event = useEvent(eventId);
   const sim = useSim(event);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -119,8 +120,8 @@ export default function EventWorkspace({ eventId, tab: rawTab = 'overview' }) {
           <div className="info stack" style={{ gap: 8 }}>
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <span className="min0 small">
-                <strong>Demo controls.</strong>{' '}
-                {event.phase === 'planning' && 'Open registration to see registrations and payments flow in (synthetic data).'}
+                <strong>{isLive ? 'Event phase.' : 'Demo controls.'}</strong>{' '}
+                {event.phase === 'planning' && (isLive ? 'Open registration when the event page is ready. Publish it under Reports → Event page.' : 'Open registration to see registrations and payments flow in (synthetic data).')}
                 {event.phase === 'live' && 'Start event day to monitor check-ins, weather and incidents.'}
                 {event.phase === 'eventday' && 'Close event day to generate results, the scorecard and reports.'}
                 {event.phase === 'complete' && 'Complete the After Action Review, then create the next edition.'}
@@ -176,6 +177,7 @@ export default function EventWorkspace({ eventId, tab: rawTab = 'overview' }) {
         {tab === 'impact' && <ImpactReport event={event} sim={sim} setTab={setTab} />}
         {tab === 'aar' && <AAR event={event} sim={sim} setTab={setTab} />}
         {tab === 'page' && <EventPage event={event} sim={sim} />}
+        {tab === 'participants' && <Participants event={event} />}
       </div>
     </div>
   );

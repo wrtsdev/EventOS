@@ -113,6 +113,9 @@ const HANDLERS = {
     if (!sim.registered) {
       return { title: 'Registration', blocks: [p('Registration has not opened yet. When it does, EventOS will show where people drop off between viewing your page and paying.'), p('Before you open: set an early price, give team captains a link, and ask your cause partner to share the page.')] };
     }
+    if (!sim.funnel.length) {
+      return { title: 'Registration', blocks: [p(`${sim.registered} of ${sim.goal} registered (${pct(sim.goal ? sim.registered / sim.goal : 0)}).${sim.payments?.pending ? ` ${sim.payments.pending} people started paying but did not finish.` : ''}`), p('Page views are not tracked yet, so EventOS cannot show where visitors drop off. Share the public page with team captains and partners, and follow up on unfinished payments.')], link: { label: 'Open Command Center', tab: 'overview' } };
+    }
     const f = sim.funnel;
     const step = f.findIndex((s) => s.stage === sim.leakStage);
     const rate = step > 0 ? f[step].count / f[step - 1].count : 0;
@@ -151,6 +154,7 @@ const HANDLERS = {
   },
   sponsor({ sim }) {
     if (!sim.sponsors.length) return { title: 'Sponsors', blocks: [p('This event has no sponsors yet. Add sponsor visibility in the Event Builder to see suggested partners for your 4W focus.')] };
+    if (sim.live) return { title: 'Sponsor performance', blocks: [p('Sponsor visibility (impressions, booth visits, promo codes, survey recall) is not tracked yet for live events. Track each sponsor\u2019s deliverables in Sponsors so renewals rest on what was delivered.')], link: { label: 'Open sponsors', tab: 'sponsors' } };
     const ranked = [...sim.sponsors].sort((a, b) => b.boothVisits + b.registrations * 3 - (a.boothVisits + a.registrations * 3));
     const top = ranked[0];
     return {

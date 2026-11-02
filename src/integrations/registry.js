@@ -9,6 +9,13 @@
 
 import { defineAdapter } from './adapter.js';
 
+// RunSignup sends dates like "2026-09-30 18:04:11" or "9/30/2026 18:04"; fall back to now.
+function safeDate(v) {
+  if (!v) return new Date().toISOString();
+  const iso = /^\d{4}-\d{2}-\d{2} /.test(v) ? new Date(v.replace(' ', 'T') + 'Z') : new Date(v);
+  return Number.isNaN(iso.getTime()) ? new Date().toISOString() : iso.toISOString();
+}
+
 const splitName = (full = '') => {
   const [first = '', ...rest] = full.trim().split(/\s+/);
   const last = rest.join(' ');
@@ -32,14 +39,14 @@ export const runSignup = defineAdapter({
       id: `p-rsu-${raw.registration_id}`,
       externalId: String(raw.registration_id),
       source: 'runsignup',
-      firstName: raw.user.first_name,
-      lastInitial: (raw.user.last_name || '')[0] ?? '',
-      email: raw.user.email ?? null,
-      zip: raw.user.address?.zipcode ?? null,
+      firstName: raw.user?.first_name ?? '',
+      lastInitial: (raw.user?.last_name || '')[0] ?? '',
+      email: raw.user?.email ?? null,
+      zip: raw.user?.address?.zipcode ?? null,
       team: raw.team_name ?? null,
       referralCode: raw.coupon_code ?? null,
-      registeredAt: new Date(raw.registration_date.replace(' ', 'T') + 'Z').toISOString(),
-      amountPaid: Number(raw.amount_paid),
+      registeredAt: safeDate(raw.registration_date),
+      amountPaid: Number(raw.amount_paid) || 0,
       consent: { analytics: true, marketing: raw.opt_ins?.email === 'T', sharePartners: raw.opt_ins?.partner_share === 'T' },
     };
   },

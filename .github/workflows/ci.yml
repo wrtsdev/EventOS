@@ -9,12 +9,27 @@ jobs:
   check:
     name: Install, test, build
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: eventos_test
+          MYSQL_USER: eventos
+          MYSQL_PASSWORD: devpass
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      REQUIRE_DB: '1'
+      TEST_DATABASE_URL: mysql://eventos:devpass@127.0.0.1:3306/eventos_test
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies

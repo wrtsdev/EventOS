@@ -5,19 +5,29 @@ EventOS — Developed and Distributed by We Run These Streetz LLC. *Move Forward
 
 > The 4Ws define why an event matters. EPIC defines how the event should operate. EventOS makes both executable, measurable and repeatable.
 
-This repository is a working, clickable prototype. A WRTS stakeholder can take an event from charter to next edition: purpose and 4Ws, EPIC readiness, budget, safety, workforce, communications, event day, results with evidence, After Action Review, and a cloned next edition that carries the lessons forward.
+EventOS runs two ways from the same code:
 
-All organizations, people, registrations, payments and prior-edition results in the demo are **synthetic**. Integrations are demo adapters; nothing is sent to any outside service.
+- **Production** (`npm start`): a Node/Express server with a MySQL database, real accounts and roles, public event pages at `/e/<slug>` with registration and Stripe Checkout, RunSignup import and HubSpot sync. See `docs/DEPLOY.md`.
+- **Demo** (static build, no server): the original clickable prototype with synthetic data kept in the browser.
+
+In demo mode a WRTS stakeholder can take an event from charter to next edition: purpose and 4Ws, EPIC readiness, budget, safety, workforce, communications, event day, results with evidence, After Action Review, and a cloned next edition that carries the lessons forward.
+
+In demo mode all organizations, people, registrations, payments and prior-edition results are **synthetic** and nothing is sent to any outside service.
 
 ## Run it
 
 ```bash
 npm ci
-npm run dev        # http://localhost:5173
-npm run check      # 39 tests + production build (what CI runs)
+npm run check      # tests + production build (what CI runs)
+
+# Production mode locally (needs MySQL/MariaDB: database eventos_dev, user eventos / devpass)
+npm run build && npm start          # http://localhost:3000
+
+# Front-end only (demo mode, or proxied to the server on :3000)
+npm run dev                          # http://localhost:5173
 ```
 
-Node 20 or newer.
+Node 20 or newer. The API tests run against a database (`eventos_test` locally, or `TEST_DATABASE_URL`); they are skipped when none is reachable, except in CI.
 
 ## Demo walkthrough (about 15 minutes)
 
@@ -37,6 +47,8 @@ Node 20 or newer.
 ## What's where
 
 ```
+server/        Express API: auth and sessions, events, members and invites, participants,
+               public pages and registration, Stripe/RunSignup/HubSpot, audit log, migrations/
 src/
   domain/      epic, controls, finance, safety, workforce, comms, civic, sponsors, aar,
                access (roles, tenancy, plans), migrate, blueprint, simulate, metrics, fourW, catalog
@@ -56,8 +68,9 @@ docs/          EPIC_EXPANSION.md (gap analysis, scoring spec, status, backlog), 
 
 ## Important limits
 
-- No backend yet. Roles and tenant isolation are enforced in the client-side repository layer and are tested, but production must enforce them on the server.
+- Roles, permissions and tenant isolation are enforced by the server in production; the browser only mirrors them for the interface.
+- Live organizations see only what EventOS actually records. Page views, email opens, sponsor booth visits and surveys are shown as "Not tracked yet" rather than estimated.
+- The Participant Passport and most Gateway connectors (timing, Race Roster, fundraising) are still demo-only.
 - Safety, permit, insurance and medical guidance is planning support only and must be verified locally.
 - PLV and Community Lifetime Value are economic only. Volunteering and cause engagement are never converted to dollars.
 - The EPIC framework is incorporated as a methodology; confirm any required attribution or rights before commercial launch.
-- The approved WRTS logo file is not in the repository yet; the product uses a text wordmark.

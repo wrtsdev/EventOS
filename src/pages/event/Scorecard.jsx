@@ -6,7 +6,7 @@ import { financeView } from '../../domain/finance.js';
 import { snapshotFromEvent } from '../../domain/aar.js';
 import { FOUR_WS } from '../../domain/fourW.js';
 import { formatMoney } from '../../domain/metrics.js';
-import { Card, Ring, EpicChip, WChip, EvidencePill, Gate } from '../../components/ui.jsx';
+import { Card, Ring, EpicChip, WChip, EvidencePill, Gate, DemoTag } from '../../components/ui.jsx';
 import { fmtValue } from './Civic.jsx';
 
 export default function Scorecard({ event, sim, setTab }) {
@@ -140,7 +140,7 @@ export default function Scorecard({ event, sim, setTab }) {
         </Card>
 
         <Gate feature="seriesTrends" tier={org?.tier}>
-          <Card title="Trends across editions" aside={<span className="demo-tag">Prior editions are synthetic</span>}>
+          <Card title="Trends across editions" aside={<DemoTag>Prior editions are synthetic</DemoTag>}>
             {series.length < 1 ? <p className="small muted">Trends appear once this event has a prior edition or its After Action Review is complete.</p> : (
               <div className="grid-2">
                 <Trend title="Net revenue" rows={series} get={(s) => s.netRevenue} fmt={(v) => formatMoney(v, { compact: true })} />
