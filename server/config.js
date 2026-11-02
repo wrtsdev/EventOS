@@ -12,7 +12,8 @@ function required(name, devDefault) {
 }
 
 export function loadConfig(overrides = {}) {
-  const dbUrl = env.DATABASE_URL;
+  // Node can resolve "localhost" to IPv6 (::1), which some MySQL users aren't granted; use IPv4.
+  const dbUrl = env.DATABASE_URL ? env.DATABASE_URL.replace('@localhost:', '@127.0.0.1:').replace(/@localhost(\/|$)/, '@127.0.0.1$1') : '';
   const cfg = {
     isProd,
     port: Number(env.PORT) || 3000,
@@ -22,7 +23,7 @@ export function loadConfig(overrides = {}) {
     db: dbUrl
       ? { uri: dbUrl }
       : {
-          host: env.DB_HOST || '127.0.0.1',
+          host: !env.DB_HOST || env.DB_HOST === 'localhost' ? '127.0.0.1' : env.DB_HOST,
           port: Number(env.DB_PORT) || 3306,
           database: env.DB_NAME || 'eventos_dev',
           user: env.DB_USER || 'eventos',
