@@ -19,9 +19,7 @@ export function BrandLockup({ variant = 'primary' }) {
   const text = <span className="brand-mark">WRTS</span>;
   return (
     <>
-      {variant === 'primary'
-        ? <Logo src={LOGO_PRIMARY} alt="We Run These Streetz" className="brand-logo" fallback={text} />
-        : <Logo src={LOGO_WORDMARK} alt="WRTS" className="brand-wordmark" fallback={text} />}
+      <Logo src={LOGO_WORDMARK} alt="WRTS" className={variant === 'primary' ? 'brand-logo' : 'brand-wordmark'} fallback={text} />
       <span className="brand-sub">EventOS</span>
     </>
   );
@@ -29,5 +27,5 @@ export function BrandLockup({ variant = 'primary' }) {
 
 /** Large mark for the welcome screen. */
 export function BrandHero() {
-  return <Logo src={LOGO_PRIMARY} alt="We Run These Streetz" className="brand-hero-logo" fallback={null} />;
+  return <Logo src={LOGO_WORDMARK} alt="We Run These Streetz" className="brand-hero-logo" fallback={null} />;
 }
