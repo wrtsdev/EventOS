@@ -2,7 +2,7 @@
   "name": "wrts-eventos",
   "private": true,
   "version": "0.1.0",
-  "description": "WRTS EventOS — the community operating system for walks, runs, and movement-powered experiences.",
+  "description": "WRTS EventOS \u2014 the community operating system for walks, runs, and movement-powered experiences.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -17,15 +17,13 @@
     "start": "node server/index.js"
   },
   "dependencies": {
+    "@vitejs/plugin-react": "4.3.4",
     "bcryptjs": "2.4.3",
     "express": "4.21.2",
     "mysql2": "3.11.5",
     "nodemailer": "6.9.16",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "4.3.4",
+    "react-dom": "18.3.1",
     "vite": "5.4.11"
   }
 }
