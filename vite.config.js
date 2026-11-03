@@ -9,6 +9,8 @@ export default defineConfig({
   server: { proxy: { '/api': 'http://localhost:3000' } },
   build: {
     outDir: 'dist',
+    // Browsers from late 2022 on (Vite 7's default). esbuild 0.28 can't build for Vite 6's older default.
+    target: ['es2022', 'chrome107', 'edge107', 'firefox104', 'safari16'],
     sourcemap: false,
     chunkSizeWarningLimit: 900,
   },
