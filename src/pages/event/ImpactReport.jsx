@@ -4,6 +4,9 @@ import { formatMoney, pct } from '../../domain/metrics.js';
 import { FOUR_WS } from '../../domain/fourW.js';
 import { partnersFor } from '../../domain/simulate.js';
 import { syncPreview } from '../../integrations/hubspot.js';
+import { outcomesView } from '../../domain/civic.js';
+import { EvidencePill } from '../../components/ui.jsx';
+import { fmtValue } from './Civic.jsx';
 import { Card, Ring, Bars, WChip, formatDate } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 
@@ -20,18 +23,22 @@ export default function ImpactReport({ event, sim, setTab }) {
   const { dispatch } = useStore();
   const [sent, setSent] = useState({});
 
+  if (event.status === 'canceled') {
+    return <div className="empty">This event was canceled ({event.cancelReason}). There is no impact to report; use the After Action Review to record what happened and what to change.</div>;
+  }
   if (event.phase !== 'complete') {
     return (
       <div className="empty stack" style={{ alignItems: 'center' }}>
         <p>The Community Impact Report is generated automatically after event day from registration, results, surveys and cause data.</p>
         {event.phase === 'live'
-          ? <p className="small">Use <strong>Simulate race day</strong> above to generate it now.</p>
+          ? <p className="small">Use <strong>Start event day</strong> and then <strong>Close event day</strong> above to generate it.</p>
           : <p className="small">Open registration first, then simulate race day.</p>}
       </div>
     );
   }
 
   const hub = syncPreview(sim.participants, event);
+  const outcomes = outcomesView(event, sim);
   const ws = event.fourWs ?? [];
   const totalW = Object.values(sim.impact.fourWActivities).reduce((a, b) => a + b, 0);
   const metrics = [
@@ -46,13 +53,13 @@ export default function ImpactReport({ event, sim, setTab }) {
     ['Repeat participants', sim.returning],
     ['First-time participants', sim.firstTime],
     ['Referrals', sim.referrals],
-    ['Satisfaction', `${sim.impact.avgSatisfaction.toFixed(1)} / 5`],
+    ['Satisfaction', sim.impact.avgSatisfaction != null ? `${sim.impact.avgSatisfaction.toFixed(1)} / 5` : 'No survey yet'],
   ];
   const said = sim.feedback.slice(0, 5);
 
   const send = (a) => {
     setSent((s) => ({ ...s, [a.id]: true }));
-    dispatch({ type: 'toast', message: `Sent to HubSpot: ${a.crm} (mock)` });
+    dispatch({ type: 'toast', message: `Queued for ${a.crm}. Demo: nothing is sent.` });
   };
 
   return (
@@ -100,6 +107,18 @@ export default function ImpactReport({ event, sim, setTab }) {
         </div>
       </Card>
 
+      <Card title="4W outcomes with evidence" aside={<button className="btn btn-ghost btn-sm" onClick={() => setTab('civic')}>Edit results</button>}>
+        <div className="table-wrap">
+          <table className="t">
+            <thead><tr><th>Measure</th><th className="r">Target</th><th className="r">Result</th><th>Evidence</th></tr></thead>
+            <tbody>
+              {outcomes.rows.map((r) => <tr key={r.id}><td>{r.label}{r.reach && <span className="small muted"> (reach)</span>}</td><td className="r">{fmtValue(r.target, r.unit)}</td><td className="r">{fmtValue(r.actual, r.unit)}</td><td><EvidencePill level={r.evidence} /></td></tr>)}
+            </tbody>
+          </table>
+        </div>
+        <p className="small muted" style={{ marginTop: 8 }}>Attendance is shown as reach. Results without evidence are left blank, not estimated.</p>
+      </Card>
+
       <Card title="You said / We learned">
         <div className="stack">
           {said.map((f) => (
@@ -120,7 +139,7 @@ export default function ImpactReport({ event, sim, setTab }) {
                 <div style={{ fontWeight: 700 }}>{a.title} {a.fourW && <WChip id={a.fourW} />}</div>
                 <div className="small muted">{a.why}</div>
                 <button className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => send(a)} disabled={sent[a.id]}>
-                  {sent[a.id] ? <><Icon name="check" size={14} /> Sent to HubSpot</> : `Send to ${a.crm}`}
+                  {sent[a.id] ? <><Icon name="check" size={14} /> Queued (demo)</> : `Queue for ${a.crm}`}
                 </button>
               </div>
             </div>

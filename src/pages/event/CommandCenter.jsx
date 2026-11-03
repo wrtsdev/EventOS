@@ -1,9 +1,11 @@
-import { readiness } from '../../domain/blueprint.js';
+import { useMemo } from 'react';
+import { readiness, nextStatus, STATUS } from '../../domain/controls.js';
+import { epicScore, CLEARANCE } from '../../domain/epic.js';
+import { financeView } from '../../domain/finance.js';
 import { formatMoney, pct } from '../../domain/metrics.js';
 import { FOUR_WS } from '../../domain/fourW.js';
-import { Card, Stat, Ring, Progress, Columns, Bars, readinessTone } from '../../components/ui.jsx';
-import { useStore } from '../../store.jsx';
-import { nextStatus, STATUS } from '../../domain/blueprint.js';
+import { Card, Stat, Ring, Progress, Columns, Bars, readinessTone, EpicChip } from '../../components/ui.jsx';
+import { useStore, permForControl } from '../../store.jsx';
 import Icon from '../../components/Icon.jsx';
 
 const OPS = [
@@ -18,19 +20,22 @@ const OPS = [
 ];
 
 export default function CommandCenter({ event, sim, setTab }) {
-  const { dispatch } = useStore();
-  const r = readiness(event);
+  const { dispatch, org, can, isLive } = useStore();
+  const r = useMemo(() => readiness(event, sim), [event, sim]);
+  const score = useMemo(() => epicScore(event, sim, org), [event, sim, org]);
+  const fin = useMemo(() => financeView(event, sim), [event, sim]);
   const byId = Object.fromEntries(r.items.map((i) => [i.id, i]));
   const planning = event.phase === 'planning';
   const complete = event.phase === 'complete';
-  const rev = sim.revenue;
+  const clear = CLEARANCE[score.clearance];
 
   const attention = [
-    ...r.blocking.map((i) => ({ tone: 'bad', text: `${i.label} is blocking`, tab: 'blueprint' })),
-    ...(event.phase === 'live' && sim.registered / sim.goal < 0.8 ? [{ tone: 'warn', text: `Registration at ${pct(sim.registered / sim.goal)} of goal. Biggest drop: ${sim.leakFrom} → ${sim.leakStage}`, tab: 'intelligence' }] : []),
-    ...(event.phase === 'live' && sim.impact.volunteers < sim.impact.volunteersNeeded ? [{ tone: 'warn', text: `${sim.impact.volunteersNeeded - sim.impact.volunteers} more volunteers needed`, tab: 'ops' }] : []),
+    ...score.critical.map((c) => ({ tone: 'bad', text: `${c.title}: ${c.detail.toLowerCase()}`, tab: c.kind === 'finance' ? 'finance' : c.kind === 'control' ? 'blueprint' : 'safety' })),
+    ...fin.flags.filter((f) => f.severity === 'warn').map((f) => ({ tone: 'warn', text: f.title, tab: 'finance' })),
+    ...(event.phase === 'live' && sim.leakStage && sim.registered / sim.goal < 0.8 ? [{ tone: 'warn', text: `Biggest registration drop: ${sim.leakFrom} → ${sim.leakStage}`, tab: 'intelligence' }] : []),
+    ...(event.phase === 'live' && sim.impact.volunteers < sim.impact.volunteersNeeded ? [{ tone: 'warn', text: `${sim.impact.volunteersNeeded - sim.impact.volunteers} more volunteers needed`, tab: 'workforce' }] : []),
     ...r.attention.slice(0, 3).map((i) => ({ tone: 'warn', text: `${i.label} needs attention`, tab: 'blueprint' })),
-  ].slice(0, 6);
+  ].slice(0, 7);
 
   const weeks = ['8w', '7w', '6w', '5w', '4w', '3w', '2w', '1w'];
 
@@ -40,7 +45,7 @@ export default function CommandCenter({ event, sim, setTab }) {
         <Card title={complete ? 'How it went' : 'What requires attention'}>
           {complete ? (
             <div className="stack" style={{ gap: 10 }}>
-              <p>{sim.finishers} finishers, {sim.impact.volunteers} volunteers, {formatMoney(sim.impact.raised)} raised, average satisfaction {sim.impact.avgSatisfaction?.toFixed(1)} of 5.</p>
+              <p>{sim.finishers} finishers, {sim.impact.volunteers} volunteers, {formatMoney(sim.impact.raised)} raised, {sim.impact.avgSatisfaction != null ? `average satisfaction ${sim.impact.avgSatisfaction.toFixed(1)} of 5.` : 'no survey results yet.'}</p>
               <button className="btn btn-primary" style={{ alignSelf: 'flex-start' }} onClick={() => setTab('impact')}>Open the Impact Report <Icon name="arrow" size={16} /></button>
             </div>
           ) : attention.length ? (
@@ -57,7 +62,9 @@ export default function CommandCenter({ event, sim, setTab }) {
             </ul>
           ) : <p>Nothing needs you right now.</p>}
         </Card>
-        <section className="card">
+        <section className="card stack">
+          <div className={`banner ${clear.tone}`} style={{ padding: '10px 12px' }}><span className="small"><strong>{clear.label}</strong>{score.critical.length ? ` · ${score.critical.length} critical` : ''} · EPIC {score.composite ?? '–'} ({score.band}) · {Math.round(score.coverage * 100)}% assessed</span></div>
+          <div className="row" style={{ gap: 6 }}>{score.domains.map((d) => <span key={d.id} className="row" style={{ gap: 4 }}><EpicChip id={d.id} /><span className="small num" style={{ fontWeight: 700 }}>{d.score ?? '–'}</span></span>)}<button className="btn btn-ghost btn-sm" onClick={() => setTab('scorecard')}>Scorecard</button></div>
           <div className="row" style={{ gap: 18, flexWrap: 'nowrap' }}>
             <Ring value={r.score} label={r.score + '%'} caption="Ready" size={104} tone={readinessTone(r.score)} />
             <div className="min0 stack" style={{ gap: 6 }}>
@@ -73,13 +80,13 @@ export default function CommandCenter({ event, sim, setTab }) {
       <section className="stack">
         <h3 className="eyebrow">Registration</h3>
         {planning ? (
-          <div className="info">Registration has not opened. Goal: <strong>{sim.goal}</strong> participants. Use <strong>Open registration</strong> above to see live data flow in from RunSignup, Race Roster and EventOS registration.</div>
+          <div className="info">Registration has not opened. Goal: <strong>{sim.goal}</strong> participants. {isLive ? <>Publish the event page, then use <strong>Open registration</strong> above to start taking sign-ups.</> : <>Use <strong>Open registration</strong> above to see synthetic registrations flow through the demo RunSignup and Race Roster adapters.</>}</div>
         ) : (
           <>
             <div className="grid-stats">
               <Stat label="Registered" value={sim.registered} sub={`Goal ${sim.goal}`} />
               <Stat label="Of goal" value={pct(sim.registered / sim.goal)} />
-              <Stat label="Page conversion" value={pct(sim.conversionRate, 1)} sub="Visitors who registered" />
+              <Stat label="Page conversion" value={sim.conversionRate == null ? '—' : pct(sim.conversionRate, 1)} sub={sim.conversionRate == null ? 'Page views not tracked yet' : 'Visitors who registered'} />
               <Stat label="Teams" value={sim.teams.length} sub={`${sim.engagement.teamRegistrations} people on teams`} />
             </div>
             <Card title="Registrations by week">
@@ -103,35 +110,38 @@ export default function CommandCenter({ event, sim, setTab }) {
           {OPS.map(([id, label]) => {
             const item = byId[id];
             if (!item) return <div key={id} className="ops-tile" style={{ borderColor: 'var(--line)' }}>{label}<small className="muted">Not needed</small></div>;
-            const tone = STATUS[item.status].tone;
+            const tone = STATUS[item.status].tone === 'neutral' ? 'bad' : STATUS[item.status].tone;
+            const editable = !item.auto && can(permForControl(item.epic)) && event.status !== 'canceled';
             return (
-              <button key={id} className={`ops-tile ${tone}`} onClick={() => dispatch({ type: 'setChecklist', id: event.id, item: id, status: nextStatus(item.status) })} title="Tap to change status">
+              <button key={id} className={`ops-tile ${tone}`} disabled={!editable} onClick={() => dispatch({ type: 'setChecklist', id: event.id, item: id, epic: item.epic, status: nextStatus(item.status) })} title={editable ? 'Tap to change status' : 'Your role cannot change this'}>
                 {label}
                 <small>{STATUS[item.status].label}</small>
               </button>
             );
           })}
         </div>
-        <p className="small muted">Green is complete, yellow needs attention, red is blocking. Tap a tile to update it.</p>
+        <p className="small muted">Green is complete, yellow is in progress, red is blocked or not yet assessed. Tap a tile to update it.</p>
       </section>
 
       <div className="grid-2">
-        <Card title={planning ? 'Projected budget' : 'Revenue'}>
-          <dl className="kv">
-            <dt>Registration</dt><dd>{formatMoney(planning ? sim.goal * (Number(event.price) || 0) : rev.registration)}</dd>
-            <dt>Sponsorship</dt><dd>{formatMoney(planning ? sim.sponsors.reduce((a, s) => a + s.amount, 0) : rev.sponsorship)}</dd>
-            <dt>Donations to cause</dt><dd>{formatMoney(rev.donations + rev.fundraising)}</dd>
-            <dt>Merchandise</dt><dd>{formatMoney(rev.merchandise)}</dd>
-            <dt>Estimated costs</dt><dd>−{formatMoney(rev.costs)}</dd>
-            <dt className="total">{event.phase === 'live' ? 'Projected margin at goal' : planning ? 'Margin so far' : 'Event margin'}</dt>
-            <dd className="total" style={{ color: (event.phase === 'live' ? rev.projectedMargin : rev.margin) >= 0 ? 'var(--good)' : 'var(--bad)' }}>{formatMoney(event.phase === 'live' ? rev.projectedMargin : rev.margin)}</dd>
-          </dl>
-          <p className="small muted" style={{ marginTop: 10 }}>Cause donations pass through to the beneficiary and are not counted in margin.</p>
+        <Card title="Money" aside={<button className="btn btn-ghost btn-sm" onClick={() => setTab('finance')}>Open Finance</button>}>
+          {can('finance.view') ? (
+            <>
+              <dl className="kv">
+                <dt>Planned revenue</dt><dd>{formatMoney(fin.planned.revenue)}</dd>
+                <dt>Planned spending (with contingency)</dt><dd>{formatMoney(fin.planned.expense + fin.planned.contingency)}</dd>
+                <dt>Planned net</dt><dd>{formatMoney(fin.planned.net)}</dd>
+                {fin.actual && <><dt>Actual revenue so far</dt><dd>{formatMoney(fin.actual.revenue)}</dd><dt>Actual spending so far</dt><dd>{formatMoney(fin.actual.expense)}</dd></>}
+                <dt className="total">Raised for the cause</dt><dd className="total">{formatMoney(sim.revenue.donations + sim.revenue.fundraising)}</dd>
+              </dl>
+              <p className="small muted" style={{ marginTop: 10 }}>Cause donations pass through to the beneficiary and are not event revenue.</p>
+            </>
+          ) : <p className="small muted">Your role does not include financial details.</p>}
         </Card>
         <Card title="Engagement">
           {planning ? <p className="muted small">Email, referral and team activity appear once registration opens.</p> : (
             <dl className="kv">
-              <dt>Emails sent</dt><dd>{sim.engagement.emailsSent}</dd>
+              <dt>Emails sent</dt><dd>{sim.engagement.emailsSent ?? 'Not tracked yet'}</dd>
               <dt>Open rate</dt><dd>{pct(sim.engagement.openRate)}</dd>
               <dt>Click rate</dt><dd>{pct(sim.engagement.clickRate)}</dd>
               <dt>Referral registrations</dt><dd>{sim.engagement.referralRegistrations}</dd>
@@ -150,7 +160,7 @@ export default function CommandCenter({ event, sim, setTab }) {
               <dt>Took a cause action</dt><dd>{sim.impact.causeParticipants}</dd>
               <dt>Volunteers</dt><dd>{sim.impact.volunteers} of {sim.impact.volunteersNeeded}</dd>
               <dt>Survey responses</dt><dd>{complete ? sim.impact.surveyResponses : 'After event'}</dd>
-              <dt>Average satisfaction</dt><dd>{complete ? sim.impact.avgSatisfaction.toFixed(1) + ' / 5' : 'After event'}</dd>
+              <dt>Average satisfaction</dt><dd>{complete ? (sim.impact.avgSatisfaction != null ? sim.impact.avgSatisfaction.toFixed(1) + ' / 5' : 'No survey yet') : 'After event'}</dd>
               <dt>Community resources accessed</dt><dd>{complete ? sim.impact.resourcesAccessed : 'After event'}</dd>
             </dl>
             <div>

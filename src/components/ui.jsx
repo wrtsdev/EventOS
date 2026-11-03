@@ -1,7 +1,13 @@
 import { FOUR_WS } from '../domain/fourW.js';
-import { STATUS } from '../domain/blueprint.js';
+import { STATUS } from '../domain/controls.js';
+import { EPIC_DOMAINS } from '../domain/epic.js';
+import { EVIDENCE } from '../domain/civic.js';
+import { hasFeature, tierNeeded } from '../domain/access.js';
+import { TIERS } from '../domain/catalog.js';
 import { SAFETY_NOTE } from '../copilot/engine.js';
 import Icon from './Icon.jsx';
+import { useContext } from 'react';
+import { StoreContext } from '../store.jsx';
 
 export function Ring({ value, max = 100, size = 112, stroke = 11, label, caption, tone }) {
   const r = (size - stroke) / 2;
@@ -39,8 +45,48 @@ export function Stat({ label, value, sub }) {
 }
 
 export function StatusPill({ status }) {
-  const s = STATUS[status] ?? STATUS.attention;
+  const s = STATUS[status] ?? STATUS.open;
   return <span className={`pill ${s.tone}`}>{s.label}</span>;
+}
+
+export function EpicChip({ id, long = false }) {
+  const d = EPIC_DOMAINS[id];
+  if (!d) return null;
+  return <span className={`epic-chip epic-${id}`} title={d.name}><b>{id}</b>{long ? ' ' + d.name : ''}</span>;
+}
+
+export function EvidencePill({ level }) {
+  if (!level) return <span className="pill neutral plain">No evidence yet</span>;
+  const e = EVIDENCE[level];
+  return <span className={`pill ${e.tone}`} title={e.detail}>{e.label}</span>;
+}
+
+/** Shown in place of a module the organization's plan does not include. */
+export function Gate({ feature, tier, children, compact = false }) {
+  if (hasFeature(tier, feature)) return children;
+  const need = TIERS.find((t) => t.id === tierNeeded(feature));
+  return (
+    <div className={compact ? 'locked compact' : 'locked'}>
+      <span className="pill neutral plain">{need?.name ?? 'Upgrade'}</span>
+      <p>{compact ? 'Included in ' + (need?.name ?? 'a higher plan') + '.' : `This part of EventOS is included in ${need?.name}. Your current plan keeps everything simple; preview plans in Settings.`}</p>
+    </div>
+  );
+}
+
+/** Shown when the current role lacks a permission. */
+export function NoAccess({ what = 'this section' }) {
+  return <div className="locked"><span className="pill neutral plain">Restricted</span><p>Your role does not include access to {what}. Ask your organization owner.</p></div>;
+}
+
+export function AssistantTag() {
+  return <span className="assistant-tag">Assistant suggestion · review before use</span>;
+}
+
+export function DemoTag({ children = 'Demo data' }) {
+  // Live organizations see real data, so the demo label is hidden for them.
+  const store = useContext(StoreContext);
+  if (store?.isLive) return null;
+  return <span className="demo-tag">{children}</span>;
 }
 
 export function WChip({ id }) {
@@ -139,16 +185,24 @@ export function daysUntil(iso, today = new Date()) {
   return Math.round((d - today) / 86400000);
 }
 
-export const PHASES = [
-  { id: 'planning', label: 'Plan', sub: 'Blueprint and readiness' },
-  { id: 'live', label: 'Registration open', sub: 'Promote and prepare' },
-  { id: 'complete', label: 'Event day done', sub: 'Results are in' },
-  { id: 'impact', label: 'Impact', sub: 'Report and next steps' },
+export const LIFECYCLE = [
+  { id: 'discover', label: 'Discover', tab: 'charter' },
+  { id: 'design', label: 'Design', tab: 'blueprint' },
+  { id: 'finance', label: 'Finance', tab: 'finance' },
+  { id: 'prepare', label: 'Prepare', tab: 'safety' },
+  { id: 'promote', label: 'Promote', tab: 'comms' },
+  { id: 'execute', label: 'Execute', tab: 'eventday' },
+  { id: 'measure', label: 'Measure', tab: 'scorecard' },
+  { id: 'improve', label: 'Improve', tab: 'aar' },
 ];
 
-export function phaseTone(phase) {
-  return phase === 'complete' ? 'good' : phase === 'live' ? 'warn' : 'neutral';
+export function phaseTone(phase, status) {
+  if (status === 'canceled') return 'bad';
+  if (status === 'archived') return 'neutral';
+  return phase === 'complete' ? 'good' : phase === 'live' || phase === 'eventday' ? 'warn' : 'neutral';
 }
-export function phaseLabel(phase) {
-  return phase === 'complete' ? 'Completed' : phase === 'live' ? 'Registration open' : 'Planning';
+export function phaseLabel(phase, status) {
+  if (status === 'canceled') return 'Canceled';
+  if (status === 'archived') return 'Archived';
+  return { complete: 'Completed', live: 'Registration open', eventday: 'Event day', planning: 'Planning' }[phase] ?? 'Planning';
 }

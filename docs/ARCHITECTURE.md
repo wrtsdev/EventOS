@@ -69,3 +69,13 @@ The Copilot provider interface (`answer(question) → { title, blocks, disclaime
 ## CI
 
 `.github/workflows/ci.yml` runs `npm ci` then `npm run check` (node:test suites + `vite build`) on every push to `main` and every pull request.
+
+## EPIC × 4Ws expansion (November 2026)
+
+The expansion adds an EPIC operating layer between the 4Ws and the dashboards. See `EPIC_EXPANSION.md` for the full architecture, scoring specification, integration status and backlog. Key additions:
+
+- `src/domain/controls.js` and `src/domain/epic.js`: one list of EPIC controls (E, P, I, C) drives readiness, staged reviews, the scorecard and critical-risk reporting. Some controls are calculated from records and cannot be ticked by hand.
+- Domain engines for finance, safety, workforce, communications, civic outcomes, sponsorship and after-action learning, each a pure module with tests.
+- `src/domain/access.js`: roles, tenant-scoped reads and guarded writes, plan entitlements. The React store routes every write through these checks. Production must repeat them server-side (`schema.sql` row-level security).
+- `src/domain/migrate.js`: versioned client state (v1 → v2), kept side by side for safe rollback.
+- Connector statuses are now `live | mock | not-connected | planned`; no connector is presented as live.

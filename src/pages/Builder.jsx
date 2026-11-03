@@ -2,19 +2,27 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../store.jsx';
 import { PURPOSES, EVENT_TYPES, FORMATS, EXPERIENCE_FEATURES, getEventType, getPurpose } from '../domain/catalog.js';
 import { FOUR_W_LIST, FOUR_WS, suggestFourWs } from '../domain/fourW.js';
-import { recommend, readiness, volunteerNeed } from '../domain/blueprint.js';
+import { recommend, readiness, volunteerNeed, applicableChecklist } from '../domain/blueprint.js';
+import { EPIC_ORDER } from '../domain/epic.js';
+import { outcomesView } from '../domain/civic.js';
 import { getTemplate } from '../data/templates.js';
 import { SAMPLE_ORG } from '../data/sampleData.js';
-import { WChip, Ring, readinessTone } from '../components/ui.jsx';
+import { WChip, Ring, readinessTone, EpicChip } from '../components/ui.jsx';
 import Icon from '../components/Icon.jsx';
 
-const STEPS = ['Why', 'Experience', 'Basics', 'Participants', 'Review'];
+const STEPS = ['Why', 'Experience', 'Basics', 'Goals', 'Participants', 'Review'];
 
 function blankDraft(org) {
   return {
     purpose: '',
     purposeOther: '',
     fourWs: [],
+    primaryW: '',
+    audience: '',
+    partnersText: '',
+    revenueGoal: '',
+    budgetGoal: '',
+    outcomes: {},
     typeId: '',
     format: 'physical',
     name: '',
@@ -34,11 +42,11 @@ function blankDraft(org) {
 }
 
 export default function Builder({ templateId }) {
-  const { state, dispatch } = useStore();
-  const org = state.org ?? SAMPLE_ORG;
+  const { dispatch, org: currentOrg } = useStore();
+  const org = currentOrg ?? SAMPLE_ORG;
   const template = getTemplate(templateId);
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState(() => (template ? { ...blankDraft(org), ...template.preset, organization: org.name, date: '' } : blankDraft(org)));
+  const [draft, setDraft] = useState(() => (template ? { ...blankDraft(org), ...template.preset, primaryW: template.fourW, organization: org.name, date: '' } : blankDraft(org)));
   const [featuresTouched, setFeaturesTouched] = useState(Boolean(template));
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -46,7 +54,7 @@ export default function Builder({ templateId }) {
   const rec = useMemo(() => recommend(draft), [draft]);
 
   const goTo = (n) => {
-    if (n === 3 && !featuresTouched) {
+    if (n === 4 && !featuresTouched) {
       set({ features: rec.features, programming: draft.fourWs.flatMap((w) => rec.programming.filter((p) => p.fourW === w).slice(0, draft.fourWs.length > 1 ? 3 : 5)).map((p) => p.id) });
     }
     setStep(n);
@@ -54,9 +62,10 @@ export default function Builder({ templateId }) {
   };
 
   const canNext = [
-    Boolean(draft.purpose) && (draft.purpose !== 'other' || draft.purposeOther.trim()),
+    Boolean(draft.purpose) && (draft.purpose !== 'other' || draft.purposeOther.trim()) && Boolean(draft.primaryW),
     Boolean(draft.typeId),
     Boolean(draft.name.trim()),
+    true,
     true,
     true,
   ][step];
@@ -68,7 +77,14 @@ export default function Builder({ templateId }) {
 
   const choosePurpose = (id) => {
     const suggested = suggestFourWs(id);
-    set({ purpose: id, fourWs: draft.fourWs.length ? draft.fourWs : suggested });
+    if (draft.primaryW) set({ purpose: id });
+    else set({ purpose: id, fourWs: suggested, primaryW: suggested[0] ?? '' });
+  };
+
+  const choosePrimary = (w) => set({ primaryW: w, fourWs: [w, ...draft.fourWs.filter((x) => x !== w)] });
+  const toggleSupporting = (w) => {
+    if (w === draft.primaryW) return;
+    set({ fourWs: draft.fourWs.includes(w) ? draft.fourWs.filter((x) => x !== w) : [...draft.fourWs, w] });
   };
 
   const chooseType = (id) => {
@@ -79,8 +95,14 @@ export default function Builder({ templateId }) {
 
   const create = () => {
     const id = 'evt-' + Date.now().toString(36);
+    const { partnersText, ...rest } = draft;
     const event = {
-      ...draft,
+      ...rest,
+      fourWs: [draft.primaryW, ...draft.fourWs.filter((w) => w !== draft.primaryW)],
+      communityPartners: partnersText.split(',').map((x) => x.trim()).filter(Boolean),
+      revenueGoal: draft.revenueGoal ? Number(draft.revenueGoal) : null,
+      budgetGoal: draft.budgetGoal ? Number(draft.budgetGoal) : null,
+      status: 'active',
       id,
       expected: Number(draft.expected) || 0,
       cap: draft.cap ? Number(draft.cap) : '',
@@ -92,10 +114,16 @@ export default function Builder({ templateId }) {
       createdAt: new Date().toISOString(),
     };
     dispatch({ type: 'addEvent', event });
-    dispatch({ type: 'toast', message: 'Your Event Blueprint is ready' });
+    dispatch({ type: 'toast', message: 'Event Charter and EPIC readiness plan ready' });
   };
 
-  const preview = useMemo(() => readiness({ ...draft, checklist: {} }), [draft]);
+  const previewEvent = useMemo(() => ({ ...draft, id: 'draft', phase: 'planning', checklist: {}, fourWs: draft.primaryW ? [draft.primaryW, ...draft.fourWs.filter((w) => w !== draft.primaryW)] : draft.fourWs }), [draft]);
+  const preview = useMemo(() => readiness(previewEvent), [previewEvent]);
+  const plan = useMemo(() => {
+    const items = applicableChecklist(previewEvent, null, { includeAll: true });
+    return EPIC_ORDER.map((d) => ({ d, total: items.filter((i) => i.epic === d).length, critical: items.filter((i) => i.epic === d && i.weight === 'critical').length }));
+  }, [previewEvent]);
+  const measures = useMemo(() => (draft.primaryW && step >= 3 ? outcomesView(previewEvent, null).rows : []), [previewEvent, step, draft.primaryW]);
 
   return (
     <div className="wizard fade-in">
@@ -128,18 +156,28 @@ export default function Builder({ templateId }) {
             </div>
           )}
           <div className="stack" style={{ gap: 8 }}>
-            <h2 style={{ fontSize: 30 }}>Which of the 4Ws does it serve?</h2>
-            <p className="muted">Choose one or several. Your choice shapes the programming, partners, survey and follow-up EventOS suggests.</p>
+            <h2 style={{ fontSize: 30 }}>Which W matters most?</h2>
+            <p className="muted">Pick one primary W. It shapes the programming, partners, survey and outcomes EventOS suggests.</p>
           </div>
-          <div className="choices" role="group" aria-label="4W focus">
+          <div className="choices" role="radiogroup" aria-label="Primary W">
             {FOUR_W_LIST.map((w) => (
-              <button key={w.id} className={`choice w ${w.id}`} aria-pressed={draft.fourWs.includes(w.id)} onClick={() => toggle('fourWs', w.id)}>
+              <button key={w.id} role="radio" className={`choice w ${w.id}`} aria-checked={draft.primaryW === w.id} aria-pressed={draft.primaryW === w.id} onClick={() => choosePrimary(w.id)}>
                 <span className="ct">{w.name}</span>
                 <span className="ch">{w.prompt}</span>
               </button>
             ))}
           </div>
-          {draft.fourWs.length > 1 && <p className="small muted">Multiple selected. EventOS will blend programming from {draft.fourWs.map((w) => FOUR_WS[w].name).join(' and ')}.</p>}
+          {draft.primaryW && (
+            <div className="field">
+              <label>Supporting Ws (optional)</label>
+              <span className="hint">Only add what the event will really work on. No event needs to show results in all four.</span>
+              <div className="seg" role="group" aria-label="Supporting Ws">
+                {FOUR_W_LIST.filter((w) => w.id !== draft.primaryW).map((w) => (
+                  <button key={w.id} aria-pressed={draft.fourWs.includes(w.id)} onClick={() => toggleSupporting(w.id)}>{w.name}</button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -201,6 +239,14 @@ export default function Builder({ templateId }) {
               <label htmlFor="ev-cause">Who benefits? (optional)</label>
               <input id="ev-cause" className="input" value={draft.cause} onChange={(e) => set({ cause: e.target.value })} placeholder="Nonprofit, fund, school or program" />
             </div>
+            <div className="field full">
+              <label htmlFor="ev-audience">Who is it for?</label>
+              <input id="ev-audience" className="input" value={draft.audience} onChange={(e) => set({ audience: e.target.value })} placeholder="e.g. Eastgate families, first-time walkers, seniors" />
+            </div>
+            <div className="field full">
+              <label htmlFor="ev-partners">Community partners (optional)</label>
+              <input id="ev-partners" className="input" value={draft.partnersText} onChange={(e) => set({ partnersText: e.target.value })} placeholder="Separate names with commas" />
+            </div>
           </div>
           <button className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setMoreOpen((x) => !x)} aria-expanded={moreOpen}>
             {moreOpen ? 'Hide more details' : 'Add more details'}
@@ -238,6 +284,48 @@ export default function Builder({ templateId }) {
       {step === 3 && (
         <div className="stack-lg">
           <div className="stack" style={{ gap: 8 }}>
+            <h2>Goals and success measures</h2>
+            <p className="muted">Set targets now so you can compare what happened with what you intended. Rough numbers are fine.</p>
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="ev-revgoal">Revenue goal ($)</label>
+              <input id="ev-revgoal" className="input" type="number" min="0" value={draft.revenueGoal} onChange={(e) => set({ revenueGoal: e.target.value })} placeholder="Registration + sponsorship" />
+            </div>
+            <div className="field">
+              <label htmlFor="ev-budgetgoal">Spending limit ($)</label>
+              <input id="ev-budgetgoal" className="input" type="number" min="0" value={draft.budgetGoal} onChange={(e) => set({ budgetGoal: e.target.value })} placeholder="Most you can spend" />
+              <span className="hint">EventOS drafts a line-by-line budget from your plan. You review it in Finance.</span>
+            </div>
+          </div>
+          <section className="card">
+            <h3 style={{ marginBottom: 4 }}>How you will know it worked</h3>
+            <p className="small muted" style={{ marginBottom: 8 }}>Measures for your {draft.fourWs.map((w) => FOUR_WS[w].name).join(' + ')} goals. Units differ on purpose; they are never added together.</p>
+            <div className="table-wrap">
+              <table className="t">
+                <thead><tr><th>Measure</th><th>W</th><th className="r">Target</th></tr></thead>
+                <tbody>
+                  {measures.map((m) => (
+                    <tr key={m.id}>
+                      <td>{m.label}{m.reach && <span className="small muted"> (reach, not impact)</span>}</td>
+                      <td><WChip id={m.fourW} /></td>
+                      <td className="r">
+                        <label htmlFor={'tgt-' + m.id} className="sr-only" style={{ position: 'absolute', left: -9999 }}>Target for {m.label}</label>
+                        <input id={'tgt-' + m.id} className="inline-input" type="number" value={draft.outcomes[m.id]?.target ?? m.target ?? ''} onChange={(e) => set({ outcomes: { ...draft.outcomes, [m.id]: { ...draft.outcomes[m.id], target: e.target.value === '' ? null : Number(e.target.value) } } })} />
+                        <span className="small muted"> {m.unit}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {step === 4 && (
+        <div className="stack-lg">
+          <div className="stack" style={{ gap: 8 }}>
             <h2>Build the participant experience</h2>
             <p className="muted">We turned on what works for a {getEventType(draft.typeId).label.toLowerCase()}{draft.fourWs.length ? ` with a ${draft.fourWs.map((w) => FOUR_WS[w].name).join(' + ')} focus` : ''}. Change anything.</p>
           </div>
@@ -272,11 +360,11 @@ export default function Builder({ templateId }) {
         </div>
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <div className="stack-lg">
           <div className="stack" style={{ gap: 8 }}>
-            <h2>Ready to generate your Blueprint</h2>
-            <p className="muted">EventOS will build your plan, checklist and communication timeline.</p>
+            <h2>Ready to generate your charter</h2>
+            <p className="muted">EventOS will create your Event Charter, Community Purpose Statement and an initial EPIC readiness plan.</p>
           </div>
           <section className="card stack">
             <div className="row" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
@@ -284,12 +372,15 @@ export default function Builder({ templateId }) {
                 <div className="eyebrow">{getPurpose(draft.purpose).label}</div>
                 <h3 className="display" style={{ fontSize: 34, marginTop: 4 }}>{draft.name}</h3>
                 <p className="muted" style={{ marginTop: 6 }}>{getEventType(draft.typeId).label} · {FORMATS.find((f) => f.id === draft.format)?.label} · {draft.expected} people{draft.cause ? ` · Benefiting ${draft.cause}` : ''}</p>
-                <div className="row" style={{ gap: 6, marginTop: 10 }}>{draft.fourWs.map((w) => <WChip key={w} id={w} />)}</div>
+                <div className="row" style={{ gap: 6, marginTop: 10 }}>{previewEvent.fourWs.map((w, i) => <span key={w} className="row" style={{ gap: 4 }}><WChip id={w} />{i === 0 && <span className="small muted">primary</span>}</span>)}</div>
               </div>
               <Ring value={preview.score} label={preview.score + '%'} caption="Ready" size={92} stroke={9} tone={readinessTone(preview.score)} />
             </div>
             <hr className="lane" />
-            <p className="small">Your starting checklist has <strong>{preview.items.length} items</strong>, {preview.blocking.length} of them must be done before race day. The Blueprint explains each one in plain language.</p>
+            <p className="small">Initial EPIC readiness plan: <strong>{plan.reduce((a, x) => a + x.total, 0)} controls</strong> across planning, 30-day, 7-day, event-day and closure reviews. Critical ones are always shown on their own.</p>
+            <div className="grid-stats">
+              {plan.map((x) => <div key={x.d} className="stat"><span className="label"><EpicChip id={x.d} long /></span><span className="value">{x.total}</span><span className="sub">{x.critical} critical</span></div>)}
+            </div>
             <p className="small muted">Features: {draft.features.map((id) => EXPERIENCE_FEATURES.find((f) => f.id === id)?.label).filter(Boolean).join(', ')}</p>
           </section>
         </div>
@@ -299,7 +390,7 @@ export default function Builder({ templateId }) {
         <button className="btn btn-secondary" onClick={() => goTo(Math.max(0, step - 1))} disabled={step === 0}><Icon name="back" size={16} /> Back</button>
         {step < STEPS.length - 1
           ? <button className="btn btn-primary" disabled={!canNext} onClick={() => goTo(step + 1)}>Continue <Icon name="arrow" size={16} /></button>
-          : <button className="btn btn-primary" onClick={create}>Generate my Blueprint <Icon name="arrow" size={16} /></button>}
+          : <button className="btn btn-primary" onClick={create}>Generate my charter <Icon name="arrow" size={16} /></button>}
       </div>
     </div>
   );

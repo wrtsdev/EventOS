@@ -1,14 +1,14 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useStore, useSim } from '../store.jsx';
-import { localRulesProvider, SUGGESTED_QUESTIONS } from '../copilot/engine.js';
-import { SafetyNote } from '../components/ui.jsx';
+import { localRulesProvider, SUGGESTED_QUESTIONS, GUARDRAILS } from '../copilot/engine.js';
+import { SafetyNote, AssistantTag } from '../components/ui.jsx';
 import { SAMPLE_ORG } from '../data/sampleData.js';
 import Icon from '../components/Icon.jsx';
 
 function Answer({ a, onLink }) {
   return (
     <div className="msg bot">
-      <h4>{a.title}</h4>
+      <div className="spread"><h4>{a.title}</h4>{a.basis === 'suggestion' ? <AssistantTag /> : <span className="pill good plain">From your event records</span>}</div>
       {a.blocks.map((b, i) => {
         if (b.type === 'p') return <p key={i}>{b.text}</p>;
         if (b.type === 'list') return <ul key={i} className="bullets">{b.items.map((x) => <li key={x}>{x}</li>)}</ul>;
@@ -22,12 +22,13 @@ function Answer({ a, onLink }) {
 }
 
 export default function Copilot({ eventId }) {
-  const { state, navigate } = useStore();
-  const [selected, setSelected] = useState(eventId ?? state.events[0]?.id);
-  const event = state.events.find((e) => e.id === selected) ?? state.events[0];
+  const { navigate, org, events, can } = useStore();
+  const [selected, setSelected] = useState(eventId ?? events[0]?.id);
+  const event = events.find((e) => e.id === selected) ?? events[0];
   const sim = useSim(event);
-  const org = state.org ?? SAMPLE_ORG;
-  const provider = useMemo(() => (event ? localRulesProvider({ event, sim, org }) : null), [event, sim, org]);
+  const o = org ?? SAMPLE_ORG;
+  const enabled = o.assistantEnabled !== false;
+  const provider = useMemo(() => (event && enabled ? localRulesProvider({ event, sim, org: o }) : null), [event, sim, o, enabled]);
   const [thread, setThread] = useState([]);
   const [q, setQ] = useState('');
   const endRef = useRef(null);
@@ -46,26 +47,35 @@ export default function Copilot({ eventId }) {
 
   const onLink = (link) => navigate(link.view ? link.view : { name: 'event', eventId: event.id, tab: link.tab });
 
-  if (!event) return <div className="empty">Create an event first, then ask Copilot about it.</div>;
+  if (!enabled) {
+    return (
+      <div className="stack-lg fade-in" style={{ maxWidth: 820, margin: '0 auto', width: '100%' }}>
+        <header className="page-head"><div className="eyebrow">Planning assistant</div><h1>Assistant is turned off</h1></header>
+        <div className="empty">Your organization has turned the assistant off. Everything else in EventOS works the same: readiness, finance, safety, reports and reviews are all calculated from your records.{can('org.admin') && <> <button className="btn btn-ghost" onClick={() => navigate('settings')}>Change in Settings</button></>}</div>
+      </div>
+    );
+  }
+  if (!event) return <div className="empty">Create an event first, then ask the assistant about it.</div>;
 
   return (
     <div className="stack-lg fade-in" style={{ maxWidth: 820, margin: '0 auto', width: '100%' }}>
       <header className="page-head">
-        <div className="eyebrow">EventOS Copilot</div>
+        <div className="eyebrow">Planning assistant · optional</div>
         <h1>Ask about your event</h1>
         <div className="field" style={{ maxWidth: 420 }}>
           <label htmlFor="cp-event">Event</label>
           <select id="cp-event" className="select" value={event.id} onChange={(e) => setSelected(e.target.value)}>
-            {state.events.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            {events.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
         </div>
-        <p className="small muted">Prototype: answers are built from this event’s data by a local rules engine. The same interface is ready for a hosted AI model or MCP-connected agent.</p>
+        <div className="info small">{GUARDRAILS} Answers marked <AssistantTag /> are recommendations; answers marked “From your event records” restate your own data.</div>
+        <p className="small muted">Prototype: a local rules engine reads only this organization’s records for the selected event. The same interface can host an AI model or MCP-connected agent with the same limits.</p>
       </header>
 
       <div className="chat">
         <div className="msg bot">
-          <h4>Hi{org.coordinator ? `, ${org.coordinator.split(' ')[0]}` : ''}. I know {event.name}.</h4>
-          <p>Ask me what is left to do, how registration is going, who to invite back, or what to plan next.</p>
+          <h4>Hi{o.coordinator ? `, ${o.coordinator.split(' ')[0]}` : ''}. I know {event.name}.</h4>
+          <p>Ask what is left to do, which EPIC controls apply, where things are stuck, or what to plan next.</p>
         </div>
         {thread.map((t, i) => (
           <div key={i} className="chat">
@@ -81,7 +91,7 @@ export default function Copilot({ eventId }) {
       </div>
 
       <form className="composer" onSubmit={(e) => { e.preventDefault(); ask(q); }}>
-        <label htmlFor="cp-q" className="sr-only" style={{ position: 'absolute', left: -9999 }}>Your question</label>
+        <label htmlFor="cp-q" style={{ position: 'absolute', left: -9999 }}>Your question</label>
         <input id="cp-q" className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask anything about this event" autoComplete="off" />
         <button className="btn btn-primary" type="submit" aria-label="Ask"><Icon name="send" size={18} /></button>
       </form>

@@ -20,14 +20,17 @@ test('readiness: physical events require safety items; virtual events do not', (
   assert.ok(virtual.includes('mile-logging'));
 });
 
-test('readiness: score rises as items complete and reaches 100', () => {
+test('readiness: manual controls alone cannot reach 100; record-based controls must also pass', () => {
   const start = readiness(base).score;
   const items = applicableChecklist(base);
-  const allDone = Object.fromEntries(items.map((i) => [i.id, 'done']));
-  assert.equal(readiness({ ...base, checklist: allDone }).score, 100);
+  const manualDone = Object.fromEntries(items.filter((i) => !i.auto).map((i) => [i.id, 'done']));
+  const r = readiness({ ...base, checklist: manualDone });
   assert.ok(start < 50);
+  assert.ok(r.score > start);
+  assert.ok(r.missing.every((i) => i.auto), 'only calculated controls remain');
   assert.equal(nextStatus('blocking'), 'attention');
   assert.equal(nextStatus('done'), 'blocking');
+  assert.equal(nextStatus('open'), 'attention');
 });
 
 test('4Ws change recommendations and blueprint content', () => {
@@ -78,8 +81,9 @@ test('simulation is deterministic and respects phase', () => {
 
 test('sample events and templates cover the three demo scenarios', () => {
   assert.deepEqual(TEMPLATES.map((t) => t.fourW), ['wellness', 'wealth', 'wisdom']);
-  assert.deepEqual(SAMPLE_EVENTS.map((e) => e.phase), ['planning', 'live', 'complete']);
-  for (const e of SAMPLE_EVENTS) {
+  const demo = SAMPLE_EVENTS.filter((e) => e.organizationId === 'org-demo');
+  assert.deepEqual(demo.map((e) => e.phase), ['planning', 'live', 'complete']);
+  for (const e of demo) {
     const s = simulateEvent(e, SAMPLE_ORG);
     assert.ok(Number.isFinite(s.plv.value) && s.plv.value > 0, e.name);
   }
