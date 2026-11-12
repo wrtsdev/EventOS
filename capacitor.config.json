@@ -1,0 +1,31 @@
+{
+  "appId": "com.werunthesestreetz.eventos",
+  "appName": "EventOS",
+  "webDir": "native/www",
+  "server": {
+    "url": "https://eventos.werunthesestreetz.com",
+    "errorPath": "offline.html",
+    "allowNavigation": [
+      "eventos.werunthesestreetz.com",
+      "checkout.stripe.com"
+    ]
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#050B54",
+    "appendUserAgent": "EventOS-iOS",
+    "scheme": "EventOS"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "launchShowDuration": 0,
+      "backgroundColor": "#000000",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK"
+    }
+  }
+}

@@ -694,3 +694,26 @@ table.t td .inline-input { max-width: 120px; }
 .check-row { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
 .check-row input { margin-top: 3px; }
 @media (max-width: 820px) { .auth-wrap { grid-template-columns: 1fr; padding: 16px; } .auth-hero h1 { font-size: 34px; } }
+
+/* ---------- iPhone ---------- */
+/* iOS zooms the page when a field under 16px gets focus. */
+@media (pointer: coarse) {
+  .input, .select, .textarea, .inline-input { font-size: 16px; }
+}
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+/* Inside the iOS app: a navy band behind the status bar on every screen, so its
+   light text stays readable over light pages, and no rubber-band gap at the top. */
+html.native { background: var(--deep); overscroll-behavior-y: none; }
+html.native body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--deep);
+  z-index: 1000;
+  pointer-events: none;
+}
+/* Long-pressing a button or tab shouldn't select its label. */
+html.native button, html.native .btn, html.native .tabs, html.native nav { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* Screens without the top bar start below the status bar. */
+html.native .auth-wrap, html.native .public-wrap { padding-top: calc(16px + env(safe-area-inset-top, 0px)); }

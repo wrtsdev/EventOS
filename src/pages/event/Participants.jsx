@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store.jsx';
 import { api } from '../../api.js';
+import { downloadFile } from '../../native.js';
 import { formatMoney } from '../../domain/metrics.js';
 import { Card, Stat, NoAccess } from '../../components/ui.jsx';
 
@@ -92,7 +93,7 @@ export default function Participants({ event }) {
         </div>
         <span className="row" style={{ gap: 6 }}>
           <button className="btn btn-ghost btn-sm" onClick={load}>Refresh</button>
-          <a className="btn btn-secondary btn-sm" href={`/api/events/${event.id}/registrations.csv`} download>Export CSV</a>
+          <button className="btn btn-secondary btn-sm" onClick={() => downloadFile(`/api/events/${event.id}/registrations.csv`, `${event.slug || 'participants'}-participants.csv`).catch((e) => { if (!/cancel/i.test(e.message)) toast(e.message); })}>Export CSV</button>
         </span>
       </div>
 

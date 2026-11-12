@@ -3,16 +3,16 @@ import { getEventType } from '../../domain/catalog.js';
 import { FOUR_WS } from '../../domain/fourW.js';
 import { formatMoney } from '../../domain/metrics.js';
 import { WChip, formatDate, Progress } from '../../components/ui.jsx';
+import { isNative, openExternal, shareLink } from '../../native.js';
 
 export default function EventPage({ event, sim }) {
   const { dispatch, isLive, can } = useStore();
   const publicUrl = event.slug ? `${location.origin}/e/${event.slug}` : null;
-  const copy = () => {
+  const copy = async () => {
     try {
-      navigator.clipboard.writeText(publicUrl);
-      dispatch({ type: 'toast', message: 'Link copied' });
+      if ((await shareLink(publicUrl, event.name)) === 'copied') dispatch({ type: 'toast', message: 'Link copied' });
     } catch {
-      /* ignore */
+      /* share sheet dismissed or clipboard blocked */
     }
   };
   const type = getEventType(event.typeId);
@@ -40,8 +40,8 @@ export default function EventPage({ event, sim }) {
           </div>
           {event.isPublic && publicUrl && (
             <div className="row" style={{ gap: 6 }}>
-              <a className="small" href={publicUrl} target="_blank" rel="noreferrer" style={{ wordBreak: 'break-all' }}>{publicUrl}</a>
-              <button className="btn btn-ghost btn-sm" onClick={copy}>Copy link</button>
+              <a className="small" href={publicUrl} target="_blank" rel="noreferrer" style={{ wordBreak: 'break-all' }} onClick={(e) => { if (isNative) { e.preventDefault(); openExternal(publicUrl); } }}>{publicUrl}</a>
+              <button className="btn btn-ghost btn-sm" onClick={copy}>{isNative ? 'Share link' : 'Copy link'}</button>
             </div>
           )}
           {event.isPublic && event.phase !== 'live' && <div className="small muted">Registration opens on this page when you move the event to “Open registration”.</div>}

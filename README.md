@@ -9,6 +9,7 @@ EventOS runs two ways from the same code:
 
 - **Production** (`npm start`): a Node/Express server with a MySQL database, real accounts and roles, public event pages at `/e/<slug>` with registration and Stripe Checkout, RunSignup import and HubSpot sync. See `docs/DEPLOY.md`.
 - **Demo** (static build, no server): the original clickable prototype with synthetic data kept in the browser.
+- **iPhone app** (`ios/`): a Capacitor shell around the live site, built and uploaded to TestFlight by a GitHub workflow. See `docs/IOS.md`.
 
 In demo mode a WRTS stakeholder can take an event from charter to next edition: purpose and 4Ws, EPIC readiness, budget, safety, workforce, communications, event day, results with evidence, After Action Review, and a cloned next edition that carries the lessons forward.
 
@@ -57,12 +58,15 @@ src/
   data/        templates and synthetic sample data
   pages/       screens; pages/event/* are the event workspace sections
 tests/         domain, epic, access/isolation, validation scenario, integrations
+ios/           Xcode project for the iPhone app (Capacitor); native/ has its icon, splash and offline page
 docs/          EPIC_EXPANSION.md (gap analysis, scoring spec, status, backlog), schema.sql,
                ARCHITECTURE.md, DATA_MODEL.md
 ```
 
 ## Read next
 
+- **`docs/IOS.md`**: the iPhone app, Apple account setup, and making TestFlight builds.
+- `docs/DEPLOY.md`: running the production server on Hostinger.
 - **`docs/EPIC_EXPANSION.md`** — audit, gap analysis, EPIC scoring spec, integration status, deployment and rollback, backlog, commercialization readiness, and exactly what is operational vs. incomplete.
 - `docs/schema.sql` — production PostgreSQL schema with row-level security.
 
