@@ -31,7 +31,7 @@ export async function createSession(db, cfg, res, userId, orgId, ua) {
 }
 
 /** Loads req.user and req.session (org + role) from the session cookie. */
-export function sessionMiddleware(db) {
+export function sessionMiddleware(db, cfg = { platformAdmins: [] }) {
   return async (req, res, next) => {
     try {
       const token = parseCookies(req.headers.cookie)[COOKIE];
@@ -44,7 +44,7 @@ export function sessionMiddleware(db) {
         { h: sha256(token) },
       );
       if (row) {
-        req.user = { id: row.id, email: row.email, name: row.display_name, isPlatformAdmin: Boolean(row.is_platform_admin) };
+        req.user = { id: row.id, email: row.email, name: row.display_name, isPlatformAdmin: Boolean(row.is_platform_admin) || cfg.platformAdmins.includes(row.email) };
         // A session only grants access to an org the user is still a member of.
         req.session = row.role ? { orgId: row.organization_id, role: row.role, tokenHash: row.token_hash } : { orgId: null, role: null, tokenHash: row.token_hash };
       }

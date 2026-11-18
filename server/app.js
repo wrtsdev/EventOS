@@ -41,9 +41,9 @@ export function createApp({ db, cfg, mailer, fetchImpl }) {
 
   app.use('/api/webhooks', webhookRouter(db, cfg));
   app.use('/api/public', publicRouter(db, cfg, { fetchImpl }));
-  app.use('/api', sessionMiddleware(db));
+  app.use('/api', sessionMiddleware(db, cfg));
   app.use('/api/auth', authRouter(db, cfg, mailer));
-  app.use('/api/platform', platformRouter(db));
+  app.use('/api/platform', platformRouter(db, cfg, mailer));
   app.use('/api', integrationsRouter(db, cfg, { fetchImpl: fetchImpl ?? fetch }));
   app.use('/api', participantsRouter(db, cfg));
   app.use('/api', apiRouter(db, cfg, mailer));

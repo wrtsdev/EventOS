@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useStore } from './store.jsx';
 import Icon from './components/Icon.jsx';
 import { BrandLockup } from './components/Brand.jsx';
@@ -14,6 +15,7 @@ import Settings from './pages/Settings.jsx';
 import More from './pages/More.jsx';
 import Auth from './pages/Auth.jsx';
 import PublicEvent from './pages/PublicEvent.jsx';
+import Admin from './pages/Admin.jsx';
 import { phaseTone } from './components/ui.jsx';
 import { ROLES } from './domain/access.js';
 
@@ -31,8 +33,9 @@ const NAV_2 = [
 ];
 
 function Page() {
-  const { state, org, isLive } = useStore();
+  const { state, org, isLive, me } = useStore();
   const v = state.view;
+  if (v.name === 'admin' && me?.user?.isPlatformAdmin) return <Admin />;
   if (isLive && !org?.id) return <div className="card"><h2 className="display" style={{ fontSize: 26 }}>No organization yet</h2><p className="muted">Your account isn’t part of an organization. Ask an owner to invite you.</p></div>;
   if (!org) return <Onboarding />;
   switch (v.name) {
@@ -45,6 +48,7 @@ function Page() {
     case 'privacy': return <Privacy />;
     case 'settings': return <Settings />;
     case 'more': return <More />;
+    case 'admin': return <Admin />;
     default: return <Home />;
   }
 }
@@ -66,6 +70,11 @@ export default function App() {
 
 function Organizer() {
   const { state, navigate, dispatch, org, role, events, isLive, me, signOut } = useStore();
+  const viewKey = `${state.mode}:${state.view.name}:${state.view.eventId ?? ''}:${state.view.templateId ?? ''}`;
+  // Each new screen starts at the top (the browser otherwise keeps the old scroll position).
+  useEffect(() => {
+    try { window.scrollTo(0, 0); } catch { /* ignore */ }
+  }, [viewKey]);
   if (state.mode === 'starting') return <div className="auth-shell"><div className="public-wrap muted">Loading EventOS…</div></div>;
   if (state.mode === 'signedOut') {
     return (
@@ -76,6 +85,12 @@ function Organizer() {
     );
   }
   const current = state.view.name;
+  const isAdmin = Boolean(isLive && me?.user?.isPlatformAdmin);
+  const activeEvents = events.filter((e) => e.status !== 'archived');
+  // Signed in on the /signup address (just created an account, or a stale link): show the app at /.
+  if (location.pathname !== '/' && !location.pathname.startsWith('/e/')) {
+    try { history.replaceState(null, '', '/' + location.hash); } catch { /* ignore */ }
+  }
   const dotColor = (e) => ({ good: 'var(--good)', warn: 'var(--warn)', bad: 'var(--bad)', neutral: 'var(--ice)' })[phaseTone(e.phase, e.status)];
 
   return (
@@ -91,8 +106,8 @@ function Organizer() {
                 <Icon name={n.icon} /> {n.label}
               </button>
             ))}
-            <div className="eyebrow">Events</div>
-            {events.filter((e) => e.status !== 'archived').map((e) => (
+            {activeEvents.length > 0 && <div className="eyebrow">Events</div>}
+            {activeEvents.map((e) => (
               <button
                 key={e.id}
                 aria-current={current === 'event' && state.view.eventId === e.id ? 'page' : undefined}
@@ -108,6 +123,14 @@ function Organizer() {
                 <Icon name={n.icon} /> {n.label}
               </button>
             ))}
+            {isAdmin && (
+              <>
+                <div className="eyebrow">We Run These Streetz</div>
+                <button aria-current={current === 'admin' ? 'page' : undefined} onClick={() => navigate('admin')}>
+                  <Icon name="shield" /> WRTS admin
+                </button>
+              </>
+            )}
           </nav>
         )}
         <div className="side-foot">
@@ -122,7 +145,6 @@ function Organizer() {
                   {state.hasServer && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ice)' }} onClick={() => dispatch({ type: 'signedOut' })}>Exit demo · Sign in</button>}
                 </>}
           </div>
-          <p className="foot-brand">EventOS · Developed and distributed by We Run These Streetz LLC</p>
         </div>
       </aside>
 
@@ -149,7 +171,7 @@ function Organizer() {
           ].map((n) => (
             <button
               key={n.name}
-              aria-current={current === n.name || (n.name === 'home' && current === 'event') || (n.name === 'more' && ['gateway', 'plans', 'privacy', 'settings'].includes(current)) ? 'page' : undefined}
+              aria-current={current === n.name || (n.name === 'home' && current === 'event') || (n.name === 'more' && ['gateway', 'plans', 'privacy', 'settings', 'admin'].includes(current)) ? 'page' : undefined}
               onClick={() => navigate(n.name)}
             >
               <Icon name={n.icon} />

@@ -154,10 +154,12 @@ export function IntegrationsCard() {
                 )}
               </div>
               {i.id === 'stripe' && (
-                <div className="small muted">
-                  Webhook endpoint (Stripe → Developers → Webhooks, event <code>checkout.session.completed</code> and <code>checkout.session.expired</code>):{' '}
-                  <code style={{ wordBreak: 'break-all' }}>{data.webhookUrl}</code>{' '}
-                  <button className="btn btn-ghost btn-sm" onClick={() => copyText(data.webhookUrl, toast)}>Copy</button>
+                <div className="small muted stack" style={{ gap: 6 }}>
+                  <span>Webhook endpoint: add it in Stripe → Developers → Webhooks for <code>checkout.session.completed</code> and <code>checkout.session.expired</code>.</span>
+                  <span className="row" style={{ gap: 8, flexWrap: 'nowrap' }}>
+                    <code className="copy-code" style={{ flex: 1, minWidth: 0 }}>{data.webhookUrl}</code>
+                    <button className="btn btn-secondary btn-sm" onClick={() => copyText(data.webhookUrl, toast)}>Copy</button>
+                  </span>
                 </div>
               )}
               {open === i.id && (

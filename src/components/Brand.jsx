@@ -1,31 +1,38 @@
 import { useState } from 'react';
 
-// Official WRTS marks. Files live in public/assets/brand/ and must be used as
-// supplied: no redrawing, recoloring, stretching, rotating or effects.
-// If a file is missing the text wordmark is shown instead, so the app never
-// renders a broken image.
+// Official WRTS mark, cut out from its black field (public/assets/brand/).
+// Brand blue on light surfaces; the white version on navy and in dark mode,
+// where the blue would disappear. Never stretched, rotated or given effects.
+// If a file is missing the text wordmark is shown, so no broken image appears.
 const BASE = import.meta.env.BASE_URL ?? './';
-export const LOGO_PRIMARY = `${BASE}assets/brand/wrts-primary-logo.webp`;
-export const LOGO_WORDMARK = `${BASE}assets/brand/wrts-wordmark.webp`;
+export const LOGO_BLUE = `${BASE}assets/brand/wrts-wordmark.webp`;
+export const LOGO_WHITE = `${BASE}assets/brand/wrts-wordmark-white.webp`;
 
-function Logo({ src, alt, className, fallback }) {
+/** on: 'dark' (navy surface, white mark) or 'auto' (page surface: blue, white in dark mode). */
+function Logo({ on = 'auto', alt, className, fallback }) {
   const [failed, setFailed] = useState(false);
   if (failed) return fallback;
-  return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} />;
+  if (on === 'dark') return <img src={LOGO_WHITE} alt={alt} className={className} onError={() => setFailed(true)} />;
+  return (
+    <picture>
+      <source srcSet={LOGO_WHITE} media="(prefers-color-scheme: dark)" />
+      <img src={LOGO_BLUE} alt={alt} className={className} onError={() => setFailed(true)} />
+    </picture>
+  );
 }
 
-/** Sidebar and top bar lockup: WRTS mark + "EventOS". */
-export function BrandLockup({ variant = 'primary' }) {
+/** Logo + "EventOS". Sidebar and top bar sit on navy; public pages on the page background. */
+export function BrandLockup({ variant = 'primary', on = 'dark' }) {
   const text = <span className="brand-mark">WRTS</span>;
   return (
     <>
-      <Logo src={LOGO_WORDMARK} alt="WRTS" className={variant === 'primary' ? 'brand-logo' : 'brand-wordmark'} fallback={text} />
+      <Logo on={on} alt="WRTS" className={variant === 'primary' ? 'brand-logo' : 'brand-wordmark'} fallback={text} />
       <span className="brand-sub">EventOS</span>
     </>
   );
 }
 
-/** Large mark for the welcome screen. */
+/** Large mark for navy hero panels. */
 export function BrandHero() {
-  return <Logo src={LOGO_WORDMARK} alt="We Run These Streetz" className="brand-hero-logo" fallback={null} />;
+  return <Logo on="dark" alt="We Run These Streetz" className="brand-hero-logo" fallback={null} />;
 }

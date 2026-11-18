@@ -16,6 +16,8 @@ const PATHS = {
   back: 'M19 12H5M11 6l-6 6 6 6',
   send: 'M4 12l16-8-6 16-2.5-6.5z',
   heart: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z',
+  shield: 'M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6zM9 12l2 2 4-4',
+  building: 'M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M3 21h18M8 8h3M8 12h3M8 16h3',
 };
 
 export default function Icon({ name, size = 20, ...rest }) {

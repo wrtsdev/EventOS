@@ -173,15 +173,21 @@ export function SectionTitle({ eyebrow, title, aside }) {
   );
 }
 
+// Event dates are plain YYYY-MM-DD (read as local noon so they never shift a day);
+// server timestamps are full ISO strings.
+function toDate(iso) {
+  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? `${iso}T12:00:00` : iso);
+}
+
 export function formatDate(iso, opts = { month: 'short', day: 'numeric', year: 'numeric' }) {
   if (!iso) return 'Date to be set';
-  const d = new Date(iso + 'T12:00:00');
-  return d.toLocaleDateString('en-US', opts);
+  const d = toDate(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', opts);
 }
 
 export function daysUntil(iso, today = new Date()) {
   if (!iso) return null;
-  const d = new Date(iso + 'T12:00:00');
+  const d = toDate(iso);
   return Math.round((d - today) / 86400000);
 }
 

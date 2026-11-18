@@ -5,6 +5,7 @@ import { phaseLabel } from '../components/ui.jsx';
 export default function More() {
   const { navigate, dispatch, events, isLive, me, signOut, state } = useStore();
   const links = [
+    ...(isLive && me?.user?.isPlatformAdmin ? [['admin', 'WRTS admin', 'shield', 'Every organization, plans and owner accounts']] : []),
     ['settings', 'Settings and roles', 'tiers', 'Plan, assistant, EPIC weights, demo roles'],
     ['gateway', 'Integrations', 'plug', 'Registration, timing, HubSpot'],
     ['privacy', 'Privacy and consent', 'lock', 'How participant data is used'],

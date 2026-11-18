@@ -51,7 +51,7 @@ export default function PublicEvent({ slug }) {
     <div className="auth-shell">
       <div className="public-wrap">
         <header className="public-head">
-          <BrandLockup variant="wordmark" />
+          <span className="brand"><BrandLockup variant="wordmark" on="auto" /></span>
           <span className="small muted">Powered by EventOS</span>
         </header>
 

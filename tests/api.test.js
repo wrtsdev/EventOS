@@ -16,6 +16,7 @@ let pool;
 let server;
 let base;
 let mailer;
+let cfg;
 let available = true;
 const stripeCalls = [];
 
@@ -44,7 +45,7 @@ before(async () => {
   for (const { t } of tables) await pool.query(`DROP TABLE IF EXISTS \`${t}\``);
   await pool.query('SET FOREIGN_KEY_CHECKS = 1');
   await migrate(pool);
-  const cfg = loadConfig({ publicUrl: 'http://localhost:3999', db: dbCfg });
+  cfg = loadConfig({ publicUrl: 'http://localhost:3999', db: dbCfg, platformAdmins: [] });
   mailer = { configured: false, outbox: [], async send(m) { this.outbox.push(m); return { queued: false }; } };
   const app = createApp({ db: makeDb(pool), cfg, mailer, fetchImpl: fakeFetch });
   await new Promise((r) => { server = app.listen(0, '127.0.0.1', r); });
@@ -243,4 +244,69 @@ t('paid registration without Stripe connected fails cleanly', async () => {
   e = (await c.patch(`/api/events/${e.id}`, { version: e.version, patch: { isPublic: true, phase: 'live' } })).body.event;
   const r = await client().post(`/api/public/events/${e.slug}/register`, { firstName: 'No', lastName: 'Stripe', email: 'ns@example.org', waiver: true });
   assert.equal(r.status, 503);
+});
+
+t('WRTS admin console: hidden from others, creates orgs with owner set-up links', async () => {
+  const { c: outsider } = await newOrg('Outsider Org');
+  assert.equal((await outsider.get('/api/platform/orgs')).status, 404);
+  assert.equal((await outsider.get('/api/platform/summary')).status, 404);
+  assert.equal((await outsider.post('/api/platform/orgs', { name: 'Nope', ownerEmail: 'x@example.org' })).status, 404);
+
+  // An existing account becomes an admin once its email is in PLATFORM_ADMIN_EMAILS.
+  const { c: admin, email: adminEmail } = await newOrg('WRTS');
+  assert.equal((await admin.get('/api/auth/me')).body.user.isPlatformAdmin, false);
+  cfg.platformAdmins.push(adminEmail);
+  assert.equal((await admin.get('/api/auth/me')).body.user.isPlatformAdmin, true);
+
+  const sum = await admin.get('/api/platform/summary');
+  assert.equal(sum.status, 200);
+  assert.ok(sum.body.orgs >= 2 && typeof sum.body.signupOpen === 'boolean');
+
+  assert.equal((await admin.post('/api/platform/orgs', { name: '', ownerEmail: 'a@example.org' })).status, 400);
+  assert.equal((await admin.post('/api/platform/orgs', { name: 'X', ownerEmail: 'not-an-email' })).status, 400);
+  assert.equal((await admin.post('/api/platform/orgs', { name: 'X', ownerEmail: 'a@example.org', tier: 'gold' })).status, 400);
+
+  const ownerEmail = `customer-${Date.now()}@example.org`;
+  const made = await admin.post('/api/platform/orgs', { name: 'Eastside Run Club', ownerEmail, ownerName: 'Dana', tier: 'community', orgType: 'Running or walking club' });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  assert.equal(made.body.emailed, false);
+  assert.match(made.body.link, /#invite=/);
+  assert.equal(mailer.outbox.at(-1).to, ownerEmail);
+
+  let list = (await admin.get('/api/platform/orgs')).body.orgs;
+  let row = list.find((o) => o.id === made.body.org.id);
+  assert.equal(row.tier, 'community');
+  assert.equal(row.owners, null);
+  assert.equal(row.pendingOwners, ownerEmail);
+
+  // The customer opens the link, sets a password and lands in their org as owner.
+  const customer = client();
+  const token = made.body.link.split('#invite=')[1];
+  const info = await customer.get(`/api/auth/invite/${token}`);
+  assert.equal(info.body.organization, 'Eastside Run Club');
+  assert.equal(info.body.role, 'owner');
+  assert.equal((await customer.post('/api/auth/invite/accept', { token, password: 'another long phrase', name: 'Dana' })).status, 200);
+  const me = (await customer.get('/api/auth/me')).body;
+  assert.equal(me.session.orgId, made.body.org.id);
+  assert.equal(me.session.role, 'owner');
+  assert.equal(me.user.isPlatformAdmin, false);
+  assert.equal((await customer.get('/api/platform/orgs')).status, 404);
+
+  list = (await admin.get('/api/platform/orgs')).body.orgs;
+  row = list.find((o) => o.id === made.body.org.id);
+  assert.equal(row.owners, ownerEmail);
+  assert.equal(row.members, 1);
+
+  const detail = await admin.get(`/api/platform/orgs/${made.body.org.id}`);
+  assert.equal(detail.body.members[0].email, ownerEmail);
+  assert.equal((await admin.get('/api/platform/orgs/org_missing')).status, 404);
+
+  assert.equal((await admin.patch(`/api/platform/orgs/${made.body.org.id}`, { tier: 'enterprise' })).status, 200);
+  assert.equal((await admin.patch(`/api/platform/orgs/${made.body.org.id}`, { tier: 'gold' })).status, 400);
+  assert.equal((await admin.patch('/api/platform/orgs/org_missing', { tier: 'pro' })).status, 404);
+
+  const again = await admin.post(`/api/platform/orgs/${made.body.org.id}/owner-invite`, { email: 'second-owner@example.org' });
+  assert.equal(again.status, 201);
+  assert.match(again.body.link, /#invite=/);
+  cfg.platformAdmins.length = 0;
 });

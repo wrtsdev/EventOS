@@ -19,8 +19,8 @@ EventOS production is one Node.js process (`server/index.js`) that serves the AP
 | `APP_SECRET` | yes | 32+ random characters. Encrypts stored integration keys. **Changing it makes saved Stripe/RunSignup/HubSpot keys unreadable** (reconnect them). |
 | `PUBLIC_URL` | yes | `https://eventos.werunthesestreetz.com` — used for links, Stripe return URLs and the CSRF origin check |
 | `DATABASE_URL` or `DB_*` | yes | Set by Hostinger's database setup |
-| `SIGNUP_OPEN` | no | `false` to make new organizations invitation-only (default open) |
-| `PLATFORM_ADMIN_EMAILS` | no | Comma-separated emails that can manage all organizations' plans |
+| `SIGNUP_OPEN` | no | `false` to make new organizations invitation-only (default open). The sign-up page is at `/signup`. |
+| `PLATFORM_ADMIN_EMAILS` | no | Comma-separated emails that get the **WRTS admin** console: every organization, plans, and creating organizations with an owner set-up link. Takes effect on the next page load, including for accounts that already exist. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | no | Outgoing email for invitations and password resets (Hostinger mail: `smtp.hostinger.com`, port 465). Without it, invite links are shown to the owner to share, and password reset emails cannot be sent. |
 | `SESSION_DAYS` | no | Sign-in lifetime, default 14 |
 
@@ -36,7 +36,7 @@ Each organization connects its own services in **Settings → Connected services
 
 ## Going live checklist
 
-1. Sign up the WRTS owner account at the site, then set `SIGNUP_OPEN=false` if new organizations should be invitation-only.
+1. Sign up the WRTS owner account at `/signup`, add its email to `PLATFORM_ADMIN_EMAILS`, then set `SIGNUP_OPEN=false` if new organizations should only be created from the WRTS admin console.
 2. Configure SMTP so invitations and password resets are emailed.
 3. Connect Stripe in test mode (`sk_test_…`), publish a test event, register, pay with a Stripe test card, and confirm the registration turns **paid**. Then switch to live keys.
 4. Back up the database from hPanel on a schedule.

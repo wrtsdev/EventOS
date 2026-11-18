@@ -5,10 +5,14 @@ import { join } from 'node:path';
 
 const dist = 'dist/assets';
 const files = readdirSync(dist);
-const js = readFileSync(join(dist, files.find((f) => f.endsWith('.js'))), 'utf8').replace(/<\/script/gi, '<\\/script');
+// The entry script is the one index.html loads. Other .js files are lazy chunks for
+// the iPhone app's native plugins, which never load in a browser.
+const entry = readFileSync('dist/index.html', 'utf8').match(/<script[^>]+src="[^"]*assets\/([^"]+\.js)"/)?.[1];
+if (!entry) throw new Error('Could not find the entry script in dist/index.html');
+const js = readFileSync(join(dist, entry), 'utf8').replace(/<\/script/gi, '<\\/script');
 // Inline the brand images so the single-file preview shows the real logo.
 let jsInlined = js;
-for (const f of ['wrts-wordmark.webp', 'wrts-primary-logo.webp']) {
+for (const f of ['wrts-wordmark.webp', 'wrts-wordmark-white.webp']) {
   const uri = 'data:image/webp;base64,' + readFileSync(join('dist/assets/brand', f)).toString('base64');
   // Vite emits `${BASE}assets/brand/<file>`; swap the whole template for the data URI.
   const tpl = new RegExp(String.raw`\x60\$\{[A-Za-z_$][\w$]*\}assets/brand/` + f.replace('.', String.raw`\.`) + String.raw`\x60`, 'g');
