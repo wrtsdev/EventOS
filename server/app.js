@@ -1,5 +1,6 @@
 import { log } from './log.js';
 import express from 'express';
+import compression from 'compression';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,7 @@ import { apiRouter } from './api.js';
 import { participantsRouter, publicRouter } from './participants.js';
 import { integrationsRouter, webhookRouter } from './integrations.js';
 import { platformRouter } from './platform.js';
+import { seoPages } from './seo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -22,6 +24,7 @@ export function createApp({ db, cfg, mailer, fetchImpl }) {
     app.use((req, res, next) => (req.headers['x-forwarded-proto'] === 'http' ? res.redirect(301, `https://${req.headers.host}${req.originalUrl}`) : next()));
   }
   app.use(securityHeaders);
+  app.use(compression()); // gzip HTML, JS, CSS and JSON (about 70% smaller)
   // Raw body for webhook signature checks; JSON for everything else.
   app.use('/api/webhooks', express.text({ type: '*/*', limit: '1mb' }), (req, res, next) => {
     req.rawBody = typeof req.body === 'string' ? req.body : '';
@@ -51,12 +54,21 @@ export function createApp({ db, cfg, mailer, fetchImpl }) {
 
   // Built frontend. /e/:slug and every other non-API route serve the app shell.
   const dist = join(here, '..', 'dist');
+  const pages = seoPages(db, cfg, join(dist, 'index.html'));
   if (existsSync(dist)) {
-    app.use(express.static(dist, { index: false, maxAge: '1y', immutable: true, setHeaders: (res, path) => { if (path.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); } }));
-    app.get('*', (req, res) => {
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(join(dist, 'index.html'));
-    });
+    app.get('/sitemap.xml', pages.sitemap);
+    app.get('/e/:slug', pages.eventPage);
+    // Vite's hashed files never change, so browsers keep them for a year. Everything
+    // else (logos, robots.txt, llms.txt) keeps its name when edited: one day.
+    app.use(express.static(dist, {
+      index: false,
+      setHeaders: (res, path) => {
+        if (path.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+        else if (/[\\/]assets[\\/][^\\/]+-[\w-]{8}\.(js|css|woff2?)$/.test(path)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        else res.setHeader('Cache-Control', 'public, max-age=86400');
+      },
+    }));
+    app.get('*', pages.appShell);
   }
 
   // Errors: log details server-side, return a plain message.

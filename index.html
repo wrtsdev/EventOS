@@ -4,18 +4,72 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#050B54" />
-    <meta name="description" content="WRTS EventOS — from idea to impact. Build your community event in one guided system." />
-    <title>WRTS EventOS</title>
+    <!--head:start-->
+    <title>EventOS by We Run These Streetz · Plan, run and measure community events</title>
+    <meta name="description" content="EventOS is event software from We Run These Streetz for community runs, walks and wellness events: plan with the 4Ws, open registration and take payments, check people in, and report impact with EPIC scorecards." />
+    <link rel="canonical" href="https://eventos.werunthesestreetz.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="EventOS by We Run These Streetz" />
+    <meta property="og:title" content="EventOS · From idea to impact" />
+    <meta property="og:description" content="Plan, run, measure and repeat community events with the 4Ws and EPIC built in." />
+    <meta property="og:url" content="https://eventos.werunthesestreetz.com/" />
+    <meta property="og:image" content="https://eventos.werunthesestreetz.com/assets/brand/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://werunthesestreetz.com/#org",
+            "name": "We Run These Streetz LLC",
+            "alternateName": "WRTS",
+            "url": "https://werunthesestreetz.com/",
+            "logo": "https://eventos.werunthesestreetz.com/assets/brand/wrts-wordmark.webp",
+            "email": "sales@werunthesestreetz.com"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "EventOS",
+            "url": "https://eventos.werunthesestreetz.com/",
+            "applicationCategory": "BusinessApplication",
+            "applicationSubCategory": "Event management",
+            "operatingSystem": "Web, iOS",
+            "description": "Event software for community runs, walks and wellness events. Plan with the 4Ws (Wellness, Wealth, Wisdom, Work), publish registration pages and take payments through Stripe, check participants in, and measure impact with EPIC readiness and impact scorecards.",
+            "publisher": { "@id": "https://werunthesestreetz.com/#org" },
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free to start" }
+          }
+        ]
+      }
+    </script>
+    <!--head:end-->
     <link rel="icon" type="image/png" href="%BASE_URL%assets/brand/favicon-64.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Figtree:wght@400;500;600;700&display=swap"
-    />
+    <link rel="alternate" type="text/plain" title="About EventOS for AI assistants" href="/llms.txt" />
+    <!-- Hides the crawler summary below in browsers that run the app. Allowed by its hash in the server's CSP (server/security.js). -->
+    <script>document.documentElement.classList.add('js')</script>
+    <style>
+      /* Crawler-readable summary in #root. Browsers running the app hide it and React replaces it. */
+      .js .prerender { display: none; }
+      .prerender { max-width: 720px; margin: 48px auto; padding: 0 20px; font: 16px/1.55 system-ui, sans-serif; color: #0b1240; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!--seo:start-->
+      <main class="prerender">
+        <h1>EventOS by We Run These Streetz</h1>
+        <p>From idea to impact. EventOS helps nonprofits, running clubs, cities, schools and employers plan, run, measure and repeat community events.</p>
+        <h2>What EventOS does</h2>
+        <ul>
+          <li><strong>Plan with purpose:</strong> the Event Builder walks organizers through the 4Ws (Wellness, Wealth, Wisdom and Work), budget, safety and partners.</li>
+          <li><strong>Open registration:</strong> publish an event page, take sign-ups and payments through your own Stripe account, and check people in on race day.</li>
+          <li><strong>Show your impact:</strong> EPIC readiness and impact scorecards turn every event into a story funders and partners understand.</li>
+          <li><strong>Bring your team:</strong> invite coordinators, volunteers and partners with the right access for each role.</li>
+        </ul>
+        <p><a href="/signup">Create your organization</a> · <a href="/">Sign in</a> · <a href="https://werunthesestreetz.com/">We Run These Streetz</a></p>
+      </main>
+      <!--seo:end-->
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

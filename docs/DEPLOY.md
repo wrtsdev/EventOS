@@ -44,3 +44,17 @@ Each organization connects its own services in **Settings → Connected services
 ## Rollback
 
 Redeploy the previous commit (Hostinger → Node.js → Deployments, or push a revert). Migrations only add tables and columns, so older code keeps working with a newer schema.
+
+## Search engines and AI assistants
+
+- `robots.txt` allows everything except `/api/`. `/sitemap.xml` is generated live: home, `/signup` and every published event.
+- `/llms.txt` is a plain-text summary of EventOS for AI assistants. Edit `public/llms.txt` when the product changes.
+- `index.html` carries the page title, description, share-preview tags and schema.org data (Organization, SoftwareApplication), plus a short readable summary inside `#root` for crawlers that don't run JavaScript. Browsers hide that summary with a one-line inline script; the script's hash is allowed in the Content-Security-Policy in `server/security.js`. **If you change that script, update the hash** (`echo -n "<script text>" | openssl dgst -sha256 -binary | base64`).
+- Public event pages (`/e/:slug`) are filled in on the server with the event's title, description and schema.org `Event` data, so links shared in chat apps and AI answers show the real event. Unpublished or unknown events return 404 with `noindex`.
+
+## Speed
+
+- Responses are gzip-compressed (`compression`). Vite's hashed files are cached for a year; logos, `robots.txt` and `llms.txt` for a day.
+- Fonts are self-hosted (`@fontsource`), and the first-screen fonts are preloaded (see `vite.config.js`).
+- Screens load on first use (`React.lazy` in `src/App.jsx`), so sign-in and public event pages don't download the whole app.
+

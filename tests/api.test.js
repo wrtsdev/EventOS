@@ -7,6 +7,7 @@ import { createPool, makeDb, migrate } from '../server/db.js';
 import { createApp } from '../server/app.js';
 import { loadConfig } from '../server/config.js';
 import { signForTest } from '../server/stripe.js';
+import { eventSeo } from '../server/seo.js';
 
 const dbCfg = process.env.TEST_DATABASE_URL
   ? { uri: process.env.TEST_DATABASE_URL }
@@ -309,4 +310,34 @@ t('WRTS admin console: hidden from others, creates orgs with owner set-up links'
   assert.equal(again.status, 201);
   assert.match(again.body.link, /#invite=/);
   cfg.platformAdmins.length = 0;
+});
+
+test('event pages for search and AI: escaped tags and schema.org Event data', () => {
+  const view = { slug: 'x', name: 'Run <for> "Hope"', date: '2027-05-01', location: 'Lake Park', description: 'A 5K </script><script>alert(1)</script>', organization: 'Eastside & Co', typeLabel: '5K run/walk', format: 'physical', price: 25, cause: null, fourWs: [{ name: 'Wellness' }], programming: [], sponsors: ['Acme'], registrationOpen: true, spotsLeft: 12 };
+  const { head, body } = eventSeo(view, 'https://eventos.example/e/x');
+  assert.match(head, /<title>Run &lt;for&gt; &quot;Hope&quot; · Eastside &amp; Co · EventOS<\/title>/);
+  assert.ok(!head.includes('</script><script>'), 'JSON-LD must not close its script tag');
+  const ld = JSON.parse(head.match(/<script type="application\/ld\+json">(.*)<\/script>/)[1]);
+  assert.equal(ld['@type'], 'Event');
+  assert.equal(ld.startDate, '2027-05-01');
+  assert.equal(ld.location.name, 'Lake Park');
+  assert.equal(ld.offers.price, '25');
+  assert.match(body, /<h1>Run &lt;for&gt; &quot;Hope&quot;<\/h1>/);
+  assert.match(body, /Saturday, May 1, 2027/);
+  assert.match(body, /\$25, 12 spots left/);
+  assert.ok(!body.includes('<script>'));
+});
+
+t('sitemap lists the home page, sign-up and published events only', async () => {
+  const { c } = await newOrg('Sitemap Org');
+  let pub = (await c.post('/api/events', { ...EVENT, name: 'Sitemap Public Run' })).body.event;
+  pub = (await c.patch(`/api/events/${pub.id}`, { version: pub.version, patch: { isPublic: true } })).body.event;
+  const priv = (await c.post('/api/events', { ...EVENT, name: 'Sitemap Private Run' })).body.event;
+  const res = await fetch(base + '/sitemap.xml');
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /xml/);
+  const xml = await res.text();
+  assert.match(xml, /<loc>http:\/\/localhost:3999\/signup<\/loc>/);
+  assert.ok(xml.includes(`/e/${pub.slug}<`));
+  assert.ok(!xml.includes(`/e/${priv.slug}<`));
 });

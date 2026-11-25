@@ -12,11 +12,12 @@ export const LOGO_WHITE = `${BASE}assets/brand/wrts-wordmark-white.webp`;
 function Logo({ on = 'auto', alt, className, fallback }) {
   const [failed, setFailed] = useState(false);
   if (failed) return fallback;
-  if (on === 'dark') return <img src={LOGO_WHITE} alt={alt} className={className} onError={() => setFailed(true)} />;
+  // 360×185 files: sharp at up to 180px wide on 2× screens. width/height reserve space (no layout shift).
+  if (on === 'dark') return <img src={LOGO_WHITE} alt={alt} className={className} width={360} height={185} decoding="async" onError={() => setFailed(true)} />;
   return (
     <picture>
       <source srcSet={LOGO_WHITE} media="(prefers-color-scheme: dark)" />
-      <img src={LOGO_BLUE} alt={alt} className={className} onError={() => setFailed(true)} />
+      <img src={LOGO_BLUE} alt={alt} className={className} width={360} height={185} decoding="async" onError={() => setFailed(true)} />
     </picture>
   );
 }

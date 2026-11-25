@@ -782,3 +782,9 @@ html.native body::before {
 html.native button, html.native .btn, html.native .tabs, html.native nav { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 /* Screens without the top bar start below the status bar. */
 html.native .auth-wrap, html.native .public-wrap { padding-top: calc(16px + env(safe-area-inset-top, 0px)); }
+
+/* Shown for a moment while a screen's code loads */
+.page-loading { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 40vh; color: var(--muted); font-size: 14px; }
+.spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }

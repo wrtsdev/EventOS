@@ -1,3 +1,8 @@
+# EventOS by We Run These Streetz
+# Public pages (home, sign-up, event pages) are open to search engines and AI assistants.
+# The organizer app is behind sign-in; the API is not for crawling.
 User-agent: *
-Allow: /e/
-Disallow: /
+Allow: /
+Disallow: /api/
+
+Sitemap: https://eventos.werunthesestreetz.com/sitemap.xml

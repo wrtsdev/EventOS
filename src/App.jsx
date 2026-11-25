@@ -1,21 +1,27 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { useStore } from './store.jsx';
 import Icon from './components/Icon.jsx';
 import { BrandLockup } from './components/Brand.jsx';
-import Onboarding from './pages/Onboarding.jsx';
-import Home from './pages/Home.jsx';
-import Builder from './pages/Builder.jsx';
-import EventWorkspace from './pages/EventWorkspace.jsx';
-import Passport from './pages/Passport.jsx';
-import Copilot from './pages/Copilot.jsx';
-import Gateway from './pages/Gateway.jsx';
-import Plans from './pages/Plans.jsx';
-import Privacy from './pages/Privacy.jsx';
-import Settings from './pages/Settings.jsx';
-import More from './pages/More.jsx';
 import Auth from './pages/Auth.jsx';
-import PublicEvent from './pages/PublicEvent.jsx';
-import Admin from './pages/Admin.jsx';
+
+// Screens load on first use, so the sign-in and public event pages don't download the whole app.
+const Onboarding = lazy(() => import('./pages/Onboarding.jsx'));
+const Home = lazy(() => import('./pages/Home.jsx'));
+const Builder = lazy(() => import('./pages/Builder.jsx'));
+const EventWorkspace = lazy(() => import('./pages/EventWorkspace.jsx'));
+const Passport = lazy(() => import('./pages/Passport.jsx'));
+const Copilot = lazy(() => import('./pages/Copilot.jsx'));
+const Gateway = lazy(() => import('./pages/Gateway.jsx'));
+const Plans = lazy(() => import('./pages/Plans.jsx'));
+const Privacy = lazy(() => import('./pages/Privacy.jsx'));
+const Settings = lazy(() => import('./pages/Settings.jsx'));
+const More = lazy(() => import('./pages/More.jsx'));
+const PublicEvent = lazy(() => import('./pages/PublicEvent.jsx'));
+const Admin = lazy(() => import('./pages/Admin.jsx'));
+
+function Loading() {
+  return <div className="page-loading" role="status" aria-live="polite"><span className="spinner" aria-hidden="true" /> Loading…</div>;
+}
 import { phaseTone } from './components/ui.jsx';
 import { ROLES } from './domain/access.js';
 
@@ -64,7 +70,7 @@ function publicSlug() {
 
 export default function App() {
   const slug = publicSlug();
-  if (slug) return <PublicEvent slug={slug} />;
+  if (slug) return <Suspense fallback={<Loading />}><PublicEvent slug={slug} /></Suspense>;
   return <Organizer />;
 }
 
@@ -156,7 +162,7 @@ function Organizer() {
       </header>
 
       <main className="main" key={current + (state.view.eventId ?? '') + (state.view.templateId ?? '')}>
-        <Page />
+        <Suspense fallback={<Loading />}><Page /></Suspense>
         <p className="page-foot">EventOS — Developed and Distributed by We Run These Streetz LLC. Move Forward Together.</p>
       </main>
 

@@ -14,7 +14,7 @@ import { FOUR_WS } from '../src/domain/fourW.js';
 import { sponsorsFor } from '../src/domain/sponsors.js';
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const COUNTED = "payment_status IN ('free','paid')";
+export const COUNTED = "payment_status IN ('free','paid')";
 
 /** Non-identifying row for dashboards. */
 function toMetricRow(r, returningEmails) {

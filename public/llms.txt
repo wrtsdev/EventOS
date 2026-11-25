@@ -1,0 +1,22 @@
+# EventOS by We Run These Streetz
+
+> EventOS is event software from We Run These Streetz LLC (WRTS) for community runs, walks and wellness events. Organizers plan with the 4Ws, open registration and take payments, check people in, and report impact with EPIC scorecards.
+
+EventOS is built for nonprofits and community groups, running and walking clubs, cities and parks departments, schools, health systems, employers and faith communities. It is free to start.
+
+## What it does
+
+- **Event Builder:** a guided plan built on the 4Ws (Wellness, Wealth, Wisdom and Work), covering purpose, budget, safety, partners and sponsors. It produces an Event Charter and an EPIC readiness plan.
+- **Registration and payments:** each event gets a public page at `https://eventos.werunthesestreetz.com/e/<event>`, with sign-up, waivers (with guardian consent for minors), donations, shirt sizes and teams. Payments go through the organizer's own Stripe account. Registrations can also be imported from RunSignup.
+- **Race day:** participant lists, check-in and finishers, and CSV export.
+- **Impact:** EPIC readiness and impact scorecards for funders and partners.
+- **Teams:** owners invite coordinators, volunteers and partners with role-based access.
+- **CRM:** participants who opt in can be sent to HubSpot.
+- **iPhone app:** the same EventOS, built for TestFlight.
+
+## Links
+
+- [Create an organization](https://eventos.werunthesestreetz.com/signup)
+- [Sign in](https://eventos.werunthesestreetz.com/)
+- [We Run These Streetz](https://werunthesestreetz.com/)
+- Contact: sales@werunthesestreetz.com
