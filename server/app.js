@@ -55,8 +55,8 @@ export function createApp({ db, cfg, mailer, fetchImpl }) {
   // Built frontend. /e/:slug and every other non-API route serve the app shell.
   const dist = join(here, '..', 'dist');
   const pages = seoPages(db, cfg, join(dist, 'index.html'));
+  app.get('/sitemap.xml', pages.sitemap); // needs only the database, not the built frontend
   if (existsSync(dist)) {
-    app.get('/sitemap.xml', pages.sitemap);
     app.get('/e/:slug', pages.eventPage);
     // Vite's hashed files never change, so browsers keep them for a year. Everything
     // else (logos, robots.txt, llms.txt) keeps its name when edited: one day.
