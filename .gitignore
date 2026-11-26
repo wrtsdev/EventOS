@@ -6,3 +6,4 @@ artifact
 .env
 .env.*
 .htpasswd
+!.env.example

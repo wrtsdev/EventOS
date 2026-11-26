@@ -81,6 +81,11 @@ function Organizer() {
   useEffect(() => {
     try { window.scrollTo(0, 0); } catch { /* ignore */ }
   }, [viewKey]);
+  // A review link from an admin notification email opens the admin center (after sign-in).
+  const isAdmin = Boolean(isLive && me?.user?.isPlatformAdmin);
+  useEffect(() => {
+    if (isAdmin && /[?&]review=/.test(location.search) && state.view.name !== 'admin') navigate('admin');
+  }, [isAdmin, state.view.name, navigate]);
   if (state.mode === 'starting') return <div className="auth-shell"><div className="public-wrap muted">Loading EventOS…</div></div>;
   if (state.mode === 'signedOut') {
     return (
@@ -91,7 +96,6 @@ function Organizer() {
     );
   }
   const current = state.view.name;
-  const isAdmin = Boolean(isLive && me?.user?.isPlatformAdmin);
   const activeEvents = events.filter((e) => e.status !== 'archived');
   // Signed in on the /signup address (just created an account, or a stale link): show the app at /.
   if (location.pathname !== '/' && !location.pathname.startsWith('/e/')) {

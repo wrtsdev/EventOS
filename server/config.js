@@ -30,7 +30,10 @@ export function loadConfig(overrides = {}) {
           password: env.DB_PASSWORD ?? (isProd ? undefined : 'devpass'),
         },
     sessionDays: Number(env.SESSION_DAYS) || 14,
-    platformAdmins: (env.PLATFORM_ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+    // The master administrator's email. Used once: at startup (or when that address
+    // verifies an account request) if no master administrator exists yet. After that
+    // the database flag is the only source of master access.
+    masterEmail: (env.MASTER_ADMIN_EMAIL || '').trim().toLowerCase(),
     stripe: { secretKey: env.STRIPE_SECRET_KEY || '', webhookSecret: env.STRIPE_WEBHOOK_SECRET || '' },
     mail: {
       host: env.SMTP_HOST || '',
@@ -39,9 +42,11 @@ export function loadConfig(overrides = {}) {
       password: env.SMTP_PASSWORD || '',
       from: env.MAIL_FROM || env.SMTP_USER || '',
     },
-    signupOpen: env.SIGNUP_OPEN !== 'false',
+    // The sample-data demo runs in the browser only. Off in production unless turned on.
+    demoEnabled: env.DEMO_ENABLED ? env.DEMO_ENABLED === 'true' : !isProd,
     ...overrides,
   };
   if (isProd && cfg.appSecret.length < 32) throw new Error('APP_SECRET must be at least 32 characters');
+  cfg.mailConfigured = Boolean(cfg.mail.host && cfg.mail.user && cfg.mail.password && cfg.mail.from);
   return cfg;
 }

@@ -1,6 +1,8 @@
 // API tests against a real MySQL/MariaDB database.
 // Local: uses eventos_test (user eventos / devpass) unless TEST_DATABASE_URL is set.
 // Skipped when no database is reachable, unless REQUIRE_DB=1 (CI sets it).
+//
+// Synthetic test data lives only in this isolated test database.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPool, makeDb, migrate } from '../server/db.js';
@@ -8,17 +10,24 @@ import { createApp } from '../server/app.js';
 import { loadConfig } from '../server/config.js';
 import { signForTest } from '../server/stripe.js';
 import { eventSeo } from '../server/seo.js';
+import { createOutbox, totpCode, totpCounter, bootstrapMaster } from '../server/governance.js';
 
 const dbCfg = process.env.TEST_DATABASE_URL
   ? { uri: process.env.TEST_DATABASE_URL }
   : { host: '127.0.0.1', port: 3306, database: 'eventos_test', user: 'eventos', password: 'devpass' };
 
+const MASTER_EMAIL = 'master@wrts.test';
+const PASSWORD = 'correct horse battery';
+
 let pool;
+let db;
 let server;
 let base;
 let mailer;
+let outbox;
 let cfg;
 let available = true;
+let master; // { c, secret }
 const stripeCalls = [];
 
 // Fake Stripe/HubSpot: records requests, returns plausible bodies.
@@ -30,33 +39,6 @@ async function fakeFetch(url, init = {}) {
   if (u.includes('api.stripe.com/v1/checkout/sessions')) return json({ id: 'cs_test_123', url: 'https://checkout.stripe.com/c/pay/cs_test_123' });
   return json({ error: 'unexpected' }, 404);
 }
-
-before(async () => {
-  try {
-    pool = createPool(dbCfg);
-    await pool.query('SELECT 1');
-  } catch (e) {
-    if (process.env.REQUIRE_DB === '1') throw e;
-    available = false;
-    return;
-  }
-  // Fresh schema every run.
-  const [tables] = await pool.query("SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE()");
-  await pool.query('SET FOREIGN_KEY_CHECKS = 0');
-  for (const { t } of tables) await pool.query(`DROP TABLE IF EXISTS \`${t}\``);
-  await pool.query('SET FOREIGN_KEY_CHECKS = 1');
-  await migrate(pool);
-  cfg = loadConfig({ publicUrl: 'http://localhost:3999', db: dbCfg, platformAdmins: [] });
-  mailer = { configured: false, outbox: [], async send(m) { this.outbox.push(m); return { queued: false }; } };
-  const app = createApp({ db: makeDb(pool), cfg, mailer, fetchImpl: fakeFetch });
-  await new Promise((r) => { server = app.listen(0, '127.0.0.1', r); });
-  base = `http://127.0.0.1:${server.address().port}`;
-});
-
-after(async () => {
-  server?.close();
-  await pool?.end().catch(() => {});
-});
 
 /** A browser-like client with its own cookie jar. */
 function client() {
@@ -75,25 +57,344 @@ function client() {
   return { get: (p) => call('GET', p), post: (p, b = {}, h) => call('POST', p, b, h), patch: (p, b) => call('PATCH', p, b), put: (p, b) => call('PUT', p, b), del: (p) => call('DELETE', p) };
 }
 
-let n = 0;
-async function newOrg(name = 'Org') {
+/** The newest link of a kind in email queued to an address. */
+async function linkFromEmail(to, re) {
+  const [rows] = await pool.query('SELECT body FROM email_outbox WHERE to_email = ? ORDER BY created_at DESC', [to]);
+  for (const r of rows) {
+    const m = r.body.match(re);
+    if (m) return m[1];
+  }
+  return null;
+}
+const requestIdFor = async (email) => (await pool.query('SELECT id FROM account_requests WHERE email = ? ORDER BY created_at DESC LIMIT 1', [email]))[0][0]?.id;
+const userRow = async (email) => (await pool.query('SELECT * FROM users WHERE email = ?', [email]))[0][0];
+
+function requestBody(email, extra = {}) {
+  return { firstName: 'Pat', lastName: 'Owner', email, password: PASSWORD, organizationName: 'Org', organizationType: 'Nonprofit or community group', requestedRole: 'org_admin', intendedUse: 'Community 5Ks and wellness walks', primaryPillar: 'wellness', acceptTerms: true, ...extra };
+}
+
+async function requestAndVerify(email, extra = {}) {
   const c = client();
+  const r = await c.post('/api/auth/request', requestBody(email, extra));
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+  const token = await linkFromEmail(email, /#verify=([A-Za-z0-9_-]+)/);
+  assert.ok(token, 'verification email queued');
+  const v = await c.post('/api/auth/verify', { token });
+  assert.equal(v.status, 200, JSON.stringify(v.body));
+  return { c, verify: v.body };
+}
+
+let n = 0;
+/** A new, approved organization owner, signed in. */
+async function newOrg(name = 'Org') {
   const email = `owner${++n}-${Date.now()}@example.org`;
-  const r = await c.post('/api/auth/signup', { email, password: 'correct horse battery', name: 'Owner', organization: name });
-  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const { c } = await requestAndVerify(email, { organizationName: name });
+  const a = await master.c.post(`/api/platform/requests/${await requestIdFor(email)}/approve`, { organization: { mode: 'new', name }, role: 'owner' });
+  assert.equal(a.status, 200, JSON.stringify(a.body));
+  const l = await c.post('/api/auth/login', { email, password: PASSWORD });
+  assert.equal(l.status, 200, JSON.stringify(l.body));
   return { c, email };
 }
+
+/** Next authenticator code. Each sign-in uses a later time step (codes can't be replayed). */
+let stepOffset = 0;
+const nextCode = (secret) => totpCode(secret, totpCounter() + ++stepOffset);
+
+const legacy = {}; // accounts that existed before identity governance
+
+before(async () => {
+  try {
+    pool = createPool(dbCfg);
+    await pool.query('SELECT 1');
+  } catch (e) {
+    if (process.env.REQUIRE_DB === '1') throw e;
+    available = false;
+    return;
+  }
+  // Fresh schema every run.
+  const [tables] = await pool.query("SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE()");
+  await pool.query('SET FOREIGN_KEY_CHECKS = 0');
+  for (const { t } of tables) await pool.query(`DROP TABLE IF EXISTS \`${t}\``);
+  await pool.query('SET FOREIGN_KEY_CHECKS = 1');
+
+  // Recreate production as it was: the original schema with accounts already in it.
+  const quiet = () => {};
+  await migrate(pool, quiet, { only: ['001_init.sql'] });
+  const bcrypt = (await import('bcryptjs')).default;
+  const hash = await bcrypt.hash(PASSWORD, 4);
+  legacy.email = 'legacy-owner@wrts.test';
+  await pool.query("INSERT INTO users (id, email, display_name, password_hash, is_platform_admin) VALUES ('usr_legacy1', ?, 'Legacy Owner', ?, 1)", [legacy.email, hash]);
+  await pool.query("INSERT INTO organizations (id, name, tier, settings) VALUES ('org_legacy1', 'Legacy Org', 'pro', '{}')");
+  await pool.query("INSERT INTO memberships (organization_id, user_id, role) VALUES ('org_legacy1', 'usr_legacy1', 'owner')");
+  await pool.query("INSERT INTO sessions (token_hash, user_id, organization_id, expires_at) VALUES (REPEAT('a', 64), 'usr_legacy1', 'org_legacy1', DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 DAY))");
+  await migrate(pool, quiet);
+
+  db = makeDb(pool);
+  cfg = loadConfig({ publicUrl: 'http://localhost:3999', db: dbCfg, masterEmail: MASTER_EMAIL, rateLimitScale: 100 });
+  mailer = { configured: true, fail: false, sent: [], async send(m) { if (this.fail) throw new Error('SMTP connection refused'); this.sent.push(m); return { queued: true }; } };
+  outbox = createOutbox(db, mailer);
+  const app = createApp({ db, cfg, mailer, outbox, fetchImpl: fakeFetch });
+  await new Promise((r) => { server = app.listen(0, '127.0.0.1', r); });
+  base = `http://127.0.0.1:${server.address().port}`;
+
+  // No master yet and no account with the master email: startup bootstrap waits.
+  assert.equal(await bootstrapMaster(db, cfg), 'awaiting account');
+  // The master administrator requests access, confirms the email, and is designated master.
+  const { c, verify } = await requestAndVerify(MASTER_EMAIL, { organizationName: 'We Run These Streetz', firstName: 'Robert', lastName: 'Rivers' });
+  assert.equal(verify.status, 'master');
+  assert.equal((await c.post('/api/auth/login', { email: MASTER_EMAIL, password: PASSWORD })).status, 200);
+  // Admin center requires two-step verification first.
+  assert.equal((await c.get('/api/platform/summary')).body.code, 'mfa_enrollment_required');
+  const setup = await c.post('/api/auth/mfa/setup');
+  assert.match(setup.body.qrSvg, /<svg/);
+  const en = await c.post('/api/auth/mfa/enable', { code: totpCode(setup.body.secret, totpCounter()) });
+  assert.equal(en.status, 200, JSON.stringify(en.body));
+  master = { c, secret: setup.body.secret, recoveryCodes: en.body.recoveryCodes };
+  assert.equal((await c.get('/api/platform/summary')).status, 200);
+});
+
+after(async () => {
+  server?.close();
+  await pool?.end().catch(() => {});
+});
+
 const EVENT = { name: 'Neighborhood 5K', typeId: '5k', format: 'physical', fourWs: ['wellness'], primaryW: 'wellness', date: '2027-05-01', location: 'Park', expected: 100, cap: 2, price: 0, features: ['registration'], sponsors: [] };
 
 const t = (name, fn) => test(name, async (ctx) => (available ? fn(ctx) : ctx.skip('no database')));
 
-t('health reports the database', async () => {
+t('health reports the database and that account requests are open', async () => {
   const r = await client().get('/api/health');
   assert.equal(r.status, 200);
   assert.equal(r.body.db, 'up');
+  assert.equal(r.body.accountRequests, 'open');
 });
 
-t('signup, me, logout, login, wrong password', async () => {
+// ---------------------------------------------------------------------------
+// Identity governance (directive 4-5; acceptance 1-7, 16, 21, 23)
+// ---------------------------------------------------------------------------
+
+t('master administrator: designated once, kept on restart, can’t be taken over by changing the setting', async () => {
+  const m = await userRow(MASTER_EMAIL);
+  assert.equal(m.is_master, 1);
+  assert.equal(m.status, 'active');
+  assert.equal(await bootstrapMaster(db, cfg), 'exists');
+  // Pointing the setting at another existing account does nothing once a master exists.
+  const other = await newOrg('Takeover Org');
+  assert.equal(await bootstrapMaster(db, { ...cfg, masterEmail: other.email }), 'exists');
+  assert.equal((await userRow(other.email)).is_master, 0);
+  assert.equal((await other.c.get('/api/platform/summary')).status, 404);
+});
+
+t('existing accounts lose access until the master administrator reviews them', async () => {
+  const u = await userRow(legacy.email);
+  assert.equal(u.status, 'pending_approval');
+  assert.equal(u.is_platform_admin, 0, 'legacy platform-admin flags are cleared');
+  const [[sess]] = await pool.query("SELECT COUNT(*) AS n FROM sessions WHERE user_id = 'usr_legacy1'");
+  assert.equal(Number(sess.n), 0, 'old sessions are removed');
+  const c = client();
+  const l = await c.post('/api/auth/login', { email: legacy.email, password: PASSWORD });
+  assert.equal(l.status, 403);
+  assert.equal(l.body.status, 'pending_approval');
+  const reqId = await requestIdFor(legacy.email);
+  assert.match(reqId, /^req_legacy_/);
+  assert.equal((await master.c.post(`/api/platform/requests/${reqId}/approve`, {})).status, 200);
+  assert.equal((await c.post('/api/auth/login', { email: legacy.email, password: PASSWORD })).status, 200);
+  const me = (await c.get('/api/auth/me')).body;
+  assert.equal(me.session.orgId, 'org_legacy1', 'organization and role kept');
+  assert.equal(me.session.role, 'owner');
+  assert.equal(me.user.isPlatformAdmin, false);
+});
+
+t('open sign-up is gone', async () => {
+  assert.equal((await client().post('/api/auth/signup', { email: 'x@example.org', password: PASSWORD, organization: 'X' })).status, 410);
+});
+
+t('account request: validation, verification, admin notification, no access until approved, first sign-in activates', async () => {
+  const c = client();
+  const email = `applicant${Date.now()}@example.org`;
+  assert.equal((await c.post('/api/auth/request', requestBody(email, { password: 'short' }))).status, 400);
+  assert.equal((await c.post('/api/auth/request', requestBody(email, { acceptTerms: false }))).status, 400);
+  assert.equal((await c.post('/api/auth/request', requestBody(email, { primaryPillar: 'fun' }))).status, 400);
+  assert.equal((await c.post('/api/auth/request', requestBody(email, { requestedRole: 'superuser' }))).status, 400);
+
+  assert.equal((await c.post('/api/auth/request', requestBody(email))).status, 202);
+  assert.equal((await userRow(email)).status, 'unverified');
+  let l = await c.post('/api/auth/login', { email, password: PASSWORD });
+  assert.equal(l.status, 403);
+  assert.equal(l.body.status, 'unverified');
+
+  const token = await linkFromEmail(email, /#verify=([A-Za-z0-9_-]+)/);
+  assert.equal((await c.post('/api/auth/verify', { token })).body.status, 'pending_approval');
+  assert.equal((await c.post('/api/auth/verify', { token })).status, 400, 'verification links work once');
+  assert.equal((await userRow(email)).status, 'pending_approval');
+
+  // The master administrator is emailed a review link that doesn't approve anything by itself.
+  const reqId = await requestIdFor(email);
+  const review = await linkFromEmail(MASTER_EMAIL, new RegExp(`(\\?review=${reqId})`));
+  assert.ok(review, 'admin notification queued with a review link');
+  await client().get(`/${review}`); // opening the link (with or without the built app shell)
+  assert.equal((await userRow(email)).status, 'pending_approval');
+
+  // Pending accounts can't sign in or call protected APIs.
+  l = await c.post('/api/auth/login', { email, password: PASSWORD });
+  assert.equal(l.status, 403);
+  assert.equal(l.body.status, 'pending_approval');
+  assert.equal((await c.get('/api/events')).status, 401);
+
+  // A duplicate request reveals nothing and creates nothing.
+  const dup = await client().post('/api/auth/request', requestBody(email, { password: 'some other long passphrase' }));
+  assert.equal(dup.status, 202);
+  assert.equal((await pool.query('SELECT COUNT(*) AS n FROM users WHERE email = ?', [email]))[0][0].n, 1);
+
+  const detail = await master.c.get(`/api/platform/requests/${reqId}`);
+  assert.equal(detail.body.request.intendedUse, 'Community 5Ks and wellness walks');
+  assert.equal(detail.body.request.primaryPillar, 'wellness');
+  assert.ok(detail.body.request.termsAcceptedAt);
+
+  const a = await master.c.post(`/api/platform/requests/${reqId}/approve`, { organization: { mode: 'new', name: 'Applicant Org' }, role: 'owner' });
+  assert.equal(a.body.status, 'approved');
+  assert.equal((await master.c.post(`/api/platform/requests/${reqId}/approve`, {})).status, 409, 'decisions are final');
+  assert.ok(await linkFromEmail(email, /(approved)/), 'approval email queued');
+  assert.equal((await c.post('/api/auth/login', { email, password: PASSWORD })).status, 200);
+  assert.equal((await userRow(email)).status, 'active');
+  const me = (await c.get('/api/auth/me')).body;
+  assert.equal(me.session.role, 'owner');
+  assert.equal(me.user.isPlatformAdmin, false, 'approval never grants platform rights');
+
+  const actions = (await master.c.get('/api/platform/audit')).body.entries.map((e) => e.action);
+  for (const a of ['account.request', 'account.email_verified', 'account.approve', 'account.activated']) assert.ok(actions.includes(a), `audit has ${a}`);
+});
+
+t('request more information, then deny', async () => {
+  const email = `info${Date.now()}@example.org`;
+  const { c } = await requestAndVerify(email);
+  const reqId = await requestIdFor(email);
+  assert.equal((await master.c.post(`/api/platform/requests/${reqId}/request-info`, { note: '' })).status, 400);
+  assert.equal((await master.c.post(`/api/platform/requests/${reqId}/request-info`, { note: 'Which city will you run events in?' })).status, 200);
+  assert.equal((await userRow(email)).status, 'info_required');
+  const token = await linkFromEmail(email, /#info=([A-Za-z0-9_-]+)/);
+  assert.equal((await c.get(`/api/auth/request-info/${token}`)).body.question, 'Which city will you run events in?');
+  assert.equal((await c.post('/api/auth/request-info', { token, response: 'Hartford, CT' })).status, 200);
+  assert.equal((await userRow(email)).status, 'pending_approval');
+  assert.equal((await master.c.get(`/api/platform/requests/${reqId}`)).body.request.applicantResponse, 'Hartford, CT');
+
+  assert.equal((await master.c.post(`/api/platform/requests/${reqId}/deny`, { note: 'Outside our service area for now.' })).status, 200);
+  const l = await c.post('/api/auth/login', { email, password: PASSWORD });
+  assert.equal(l.status, 403);
+  assert.equal(l.body.status, 'denied');
+  assert.ok(await linkFromEmail(email, /(Outside our service area)/), 'denial email includes the note');
+});
+
+t('only the master administrator approves; platform admins need two-step verification; nobody can touch the master account', async () => {
+  const outsider = await newOrg('Outsider Org');
+  assert.equal((await outsider.c.get('/api/platform/requests')).status, 404);
+  assert.equal((await outsider.c.post(`/api/platform/requests/${await requestIdFor(outsider.email)}/approve`, {})).status, 404);
+
+  // Grant platform-admin rights to an active account.
+  const admin = await newOrg('Admin Org');
+  const adminId = (await userRow(admin.email)).id;
+  assert.equal((await master.c.post(`/api/platform/accounts/${adminId}/platform-admin`, { enabled: true })).status, 200);
+  assert.equal((await admin.c.get('/api/auth/me')).body.user, null, 'new rights need a fresh sign-in');
+  assert.equal((await admin.c.post('/api/auth/login', { email: admin.email, password: PASSWORD })).status, 200);
+  assert.equal((await admin.c.get('/api/platform/summary')).body.code, 'mfa_enrollment_required');
+  const setup = await admin.c.post('/api/auth/mfa/setup');
+  assert.equal((await admin.c.post('/api/auth/mfa/enable', { code: '000000' })).status, 400);
+  assert.equal((await admin.c.post('/api/auth/mfa/enable', { code: totpCode(setup.body.secret, totpCounter()) })).status, 200);
+  assert.equal((await admin.c.get('/api/platform/summary')).status, 200);
+  assert.equal((await admin.c.post('/api/auth/mfa/disable', { code: totpCode(setup.body.secret, totpCounter() + 1) })).status, 403, 'admins keep two-step on');
+
+  const email = `pending${Date.now()}@example.org`;
+  await requestAndVerify(email);
+  const reqId = await requestIdFor(email);
+  assert.equal((await admin.c.post(`/api/platform/requests/${reqId}/approve`, { organization: { mode: 'new', name: 'X' } })).status, 403);
+  assert.equal((await admin.c.post(`/api/platform/requests/${reqId}/deny`, {})).status, 403);
+  assert.equal((await admin.c.get('/api/platform/data-inventory')).status, 403);
+
+  const masterId = (await userRow(MASTER_EMAIL)).id;
+  for (const s of ['suspended', 'deactivated']) assert.equal((await admin.c.post(`/api/platform/accounts/${masterId}/status`, { status: s })).status, 403);
+  assert.equal((await admin.c.post(`/api/platform/accounts/${masterId}/sessions/revoke`)).status, 403);
+  assert.equal((await master.c.post(`/api/platform/accounts/${masterId}/status`, { status: 'suspended' })).status, 403, 'not even by the master');
+  assert.equal((await admin.c.post(`/api/platform/accounts/${adminId}/platform-admin`, { enabled: true })).status, 403);
+  assert.equal((await master.c.get('/api/auth/me')).body.user.isMaster, true);
+});
+
+t('suspended accounts lose access immediately; reactivation restores it', async () => {
+  const { c, email } = await newOrg('Suspend Org');
+  const id = (await userRow(email)).id;
+  assert.equal((await c.get('/api/events')).status, 200);
+  assert.equal((await master.c.post(`/api/platform/accounts/${id}/status`, { status: 'suspended', reason: 'Billing review' })).status, 200);
+  assert.equal((await c.get('/api/events')).status, 401);
+  const l = await c.post('/api/auth/login', { email, password: PASSWORD });
+  assert.equal(l.status, 403);
+  assert.equal(l.body.status, 'suspended');
+  assert.equal((await master.c.post(`/api/platform/accounts/${id}/status`, { status: 'active' })).status, 200);
+  assert.equal((await c.post('/api/auth/login', { email, password: PASSWORD })).status, 200);
+  assert.equal((await c.get('/api/events')).status, 200);
+  const acct = (await master.c.get(`/api/platform/accounts?q=${encodeURIComponent(email)}`)).body.accounts[0];
+  assert.equal(acct.status, 'active');
+  assert.equal((await master.c.post(`/api/platform/accounts/${id}/status`, { status: 'active' })).status, 409);
+});
+
+t('two-step sign-in: code required, wrong code refused, codes can’t be replayed, recovery codes work once', async () => {
+  const c = client();
+  const first = await c.post('/api/auth/login', { email: MASTER_EMAIL, password: PASSWORD });
+  assert.equal(first.body.mfaRequired, true);
+  assert.equal((await c.get('/api/auth/me')).body.user, null, 'no session before the second step');
+  assert.equal((await c.post('/api/auth/mfa/verify', { ticket: first.body.ticket, code: '123456' })).status, 401);
+  const code = nextCode(master.secret);
+  assert.equal((await c.post('/api/auth/mfa/verify', { ticket: first.body.ticket, code })).status, 200);
+  assert.equal((await c.get('/api/platform/summary')).status, 200);
+  // The same code can't be used again.
+  const again = await client().post('/api/auth/login', { email: MASTER_EMAIL, password: PASSWORD });
+  assert.equal((await client().post('/api/auth/mfa/verify', { ticket: again.body.ticket, code })).status, 401);
+  // A recovery code works once.
+  const rc = master.recoveryCodes[0];
+  const c2 = client();
+  const t2 = await c2.post('/api/auth/login', { email: MASTER_EMAIL, password: PASSWORD });
+  assert.equal((await c2.post('/api/auth/mfa/verify', { ticket: t2.body.ticket, code: rc })).status, 200);
+  const t3 = await client().post('/api/auth/login', { email: MASTER_EMAIL, password: PASSWORD });
+  assert.equal((await client().post('/api/auth/mfa/verify', { ticket: t3.body.ticket, code: rc })).status, 401);
+});
+
+t('email queue: failures are retried and visible to administrators; duplicates send once', async () => {
+  const to = `queue${Date.now()}@example.org`;
+  mailer.fail = true;
+  const id = await outbox.queue({ kind: 'test', to, subject: 'Queue test', body: 'Hello', dedupeKey: `dup-${to}` });
+  assert.equal(await outbox.queue({ kind: 'test', to, subject: 'Queue test', body: 'Hello', dedupeKey: `dup-${to}` }), null, 'duplicate not queued');
+  await outbox.kick();
+  await outbox.processOutbox();
+  let row = (await pool.query('SELECT * FROM email_outbox WHERE id = ?', [id]))[0][0];
+  assert.equal(row.status, 'queued');
+  assert.ok(row.attempts >= 1);
+  assert.match(row.last_error, /SMTP connection refused/);
+  const listed = (await master.c.get('/api/platform/emails')).body.emails.find((e) => e.id === id);
+  assert.match(listed.lastError, /refused/);
+  mailer.fail = false;
+  assert.equal((await master.c.post(`/api/platform/emails/${id}/retry`)).status, 200);
+  await outbox.processOutbox();
+  row = (await pool.query('SELECT * FROM email_outbox WHERE id = ?', [id]))[0][0];
+  assert.equal(row.status, 'sent');
+  assert.equal(mailer.sent.filter((m) => m.to === to).length, 1);
+});
+
+t('data inventory: master only, read-only, retains the master, flags demo-style records', async () => {
+  const { c } = await newOrg('Northside Community Alliance');
+  await c.post('/api/events', { ...EVENT, name: 'Run Your Money Walk' });
+  const before = (await pool.query('SELECT (SELECT COUNT(*) FROM users) u, (SELECT COUNT(*) FROM events) e'))[0][0];
+  const r = await master.c.get('/api/platform/data-inventory');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.users.find((u) => u.email === MASTER_EMAIL).classification, 'retain: master administrator');
+  assert.equal(r.body.organizations.find((o) => o.name === 'Northside Community Alliance').classification, 'likely synthetic');
+  assert.ok(r.body.events.some((e) => e.name === 'Run Your Money Walk' && e.classification === 'likely synthetic'));
+  const after = (await pool.query('SELECT (SELECT COUNT(*) FROM users) u, (SELECT COUNT(*) FROM events) e'))[0][0];
+  assert.deepEqual(after, before, 'nothing deleted');
+});
+
+// ---------------------------------------------------------------------------
+// Core product (unchanged behavior)
+// ---------------------------------------------------------------------------
+
+t('sign in, me, logout, wrong password', async () => {
   const { c, email } = await newOrg('Auth Org');
   let me = await c.get('/api/auth/me');
   assert.equal(me.body.user.email, email);
@@ -102,15 +403,8 @@ t('signup, me, logout, login, wrong password', async () => {
   me = await c.get('/api/auth/me');
   assert.equal(me.body.user, null);
   assert.equal((await c.post('/api/auth/login', { email, password: 'wrong password here' })).status, 401);
-  assert.equal((await c.post('/api/auth/login', { email, password: 'correct horse battery' })).status, 200);
+  assert.equal((await c.post('/api/auth/login', { email, password: PASSWORD })).status, 200);
   assert.equal((await c.get('/api/events')).status, 200);
-});
-
-t('short passwords and duplicate emails are refused', async () => {
-  const c = client();
-  assert.equal((await c.post('/api/auth/signup', { email: 'short@example.org', password: 'short', organization: 'X' })).status, 400);
-  const { email } = await newOrg();
-  assert.equal((await client().post('/api/auth/signup', { email, password: 'correct horse battery', organization: 'Y' })).status, 409);
 });
 
 t('CSRF: missing header and foreign origin are refused', async () => {
@@ -144,37 +438,49 @@ t('optimistic concurrency: stale version gets 409 with the current event', async
   assert.ok([400, 403].includes((await c.patch(`/api/events/${e.id}`, { version: ok.body.event.version, patch: { organizationId: 'org_x' } })).status));
 });
 
-t('invites, roles and permissions are enforced by the server', async () => {
+t('organization invites: a new person waits for approval; an existing active account joins; roles are enforced', async () => {
   const { c } = await newOrg('Roles Org');
   const { body: ev } = await c.post('/api/events', EVENT);
-  const inv = await c.post('/api/members/invite', { email: 'vol@example.org', role: 'volunteer' });
+  const volEmail = `vol${Date.now()}@example.org`;
+  const inv = await c.post('/api/members/invite', { email: volEmail, role: 'volunteer' });
   assert.equal(inv.status, 201);
   const token = inv.body.link.split('#invite=')[1];
   const v = client();
   assert.equal((await v.get(`/api/auth/invite/${token}`)).body.role, 'volunteer');
-  assert.equal((await v.post('/api/auth/invite/accept', { token, password: 'volunteer passphrase', name: 'Val' })).status, 200);
+  const acc = await v.post('/api/auth/invite/accept', { token, password: 'volunteer passphrase', name: 'Val' });
+  assert.equal(acc.status, 202);
+  assert.equal(acc.body.pending, true);
+  assert.equal((await v.get('/api/events')).status, 401, 'no access before approval');
+  // Token is single use.
+  assert.equal((await client().post('/api/auth/invite/accept', { token, password: 'another passphrase' })).status, 400);
+  // The master administrator approves into the inviting organization with the invited role.
+  const reqId = await requestIdFor(volEmail);
+  assert.equal((await master.c.get(`/api/platform/requests/${reqId}`)).body.request.inviteRole, 'volunteer');
+  assert.equal((await master.c.post(`/api/platform/requests/${reqId}/approve`, {})).status, 200);
+  assert.equal((await v.post('/api/auth/login', { email: volEmail, password: 'volunteer passphrase' })).status, 200);
   // Volunteer: can see events, cannot see PII, cannot invite, cannot edit the budget.
   assert.equal((await v.get('/api/events')).status, 200);
   assert.equal((await v.get(`/api/events/${ev.event.id}/registrations`)).status, 403);
   assert.equal((await v.post('/api/members/invite', { email: 'x@example.org', role: 'owner' })).status, 403);
   const cur = (await v.get(`/api/events/${ev.event.id}`)).body.event;
   assert.equal((await v.patch(`/api/events/${ev.event.id}`, { version: cur.version, patch: { budget: { lines: [] } } })).status, 403);
-  // Token is single use.
-  assert.equal((await client().post('/api/auth/invite/accept', { token, password: 'another passphrase' })).status, 400);
   // Last owner cannot be demoted.
   const members = (await c.get('/api/members')).body.members;
   const owner = members.find((m) => m.role === 'owner');
   assert.equal((await c.patch(`/api/members/${owner.id}`, { role: 'coordinator' })).status, 400);
+  // An existing active account joins another organization straight away.
+  const other = await newOrg('Second Org');
+  const inv2 = await other.c.post('/api/members/invite', { email: volEmail, role: 'partner' });
+  const t2 = inv2.body.link.split('#invite=')[1];
+  assert.equal((await client().post('/api/auth/invite/accept', { token: t2, password: 'volunteer passphrase' })).status, 200);
 });
 
 t('password reset flow', async () => {
   const { email } = await newOrg();
   const c = client();
-  mailer.outbox.length = 0;
   assert.equal((await c.post('/api/auth/password/forgot', { email })).status, 200);
-  const mail = mailer.outbox.find((m) => m.to === email);
-  assert.ok(mail, 'reset email queued');
-  const token = mail.text.match(/#reset=([A-Za-z0-9_-]+)/)[1];
+  const token = await linkFromEmail(email, /#reset=([A-Za-z0-9_-]+)/);
+  assert.ok(token, 'reset email queued');
   assert.equal((await c.post('/api/auth/password/reset', { token, password: 'brand new passphrase' })).status, 200);
   assert.equal((await c.post('/api/auth/login', { email, password: 'brand new passphrase' })).status, 200);
   assert.equal((await c.post('/api/auth/password/reset', { token, password: 'yet another one!!' })).status, 400);
@@ -247,45 +553,23 @@ t('paid registration without Stripe connected fails cleanly', async () => {
   assert.equal(r.status, 503);
 });
 
-t('WRTS admin console: hidden from others, creates orgs with owner set-up links', async () => {
-  const { c: outsider } = await newOrg('Outsider Org');
-  assert.equal((await outsider.get('/api/platform/orgs')).status, 404);
-  assert.equal((await outsider.get('/api/platform/summary')).status, 404);
-  assert.equal((await outsider.post('/api/platform/orgs', { name: 'Nope', ownerEmail: 'x@example.org' })).status, 404);
-
-  // An existing account becomes an admin once its email is in PLATFORM_ADMIN_EMAILS.
-  const { c: admin, email: adminEmail } = await newOrg('WRTS');
-  assert.equal((await admin.get('/api/auth/me')).body.user.isPlatformAdmin, false);
-  cfg.platformAdmins.push(adminEmail);
-  assert.equal((await admin.get('/api/auth/me')).body.user.isPlatformAdmin, true);
-
-  const sum = await admin.get('/api/platform/summary');
-  assert.equal(sum.status, 200);
-  assert.ok(sum.body.orgs >= 2 && typeof sum.body.signupOpen === 'boolean');
-
-  assert.equal((await admin.post('/api/platform/orgs', { name: '', ownerEmail: 'a@example.org' })).status, 400);
-  assert.equal((await admin.post('/api/platform/orgs', { name: 'X', ownerEmail: 'not-an-email' })).status, 400);
-  assert.equal((await admin.post('/api/platform/orgs', { name: 'X', ownerEmail: 'a@example.org', tier: 'gold' })).status, 400);
-
+t('WRTS admin center: organizations created by an administrator; their owner set-up links are pre-approved', async () => {
   const ownerEmail = `customer-${Date.now()}@example.org`;
-  const made = await admin.post('/api/platform/orgs', { name: 'Eastside Run Club', ownerEmail, ownerName: 'Dana', tier: 'community', orgType: 'Running or walking club' });
+  assert.equal((await master.c.post('/api/platform/orgs', { name: '', ownerEmail })).status, 400);
+  assert.equal((await master.c.post('/api/platform/orgs', { name: 'X', ownerEmail: 'not-an-email' })).status, 400);
+  assert.equal((await master.c.post('/api/platform/orgs', { name: 'X', ownerEmail, tier: 'gold' })).status, 400);
+  const made = await master.c.post('/api/platform/orgs', { name: 'Eastside Run Club', ownerEmail, ownerName: 'Dana', tier: 'community', orgType: 'Running or walking club' });
   assert.equal(made.status, 201, JSON.stringify(made.body));
-  assert.equal(made.body.emailed, false);
   assert.match(made.body.link, /#invite=/);
-  assert.equal(mailer.outbox.at(-1).to, ownerEmail);
+  assert.ok(await linkFromEmail(ownerEmail, /(#invite=)/), 'owner set-up email queued');
 
-  let list = (await admin.get('/api/platform/orgs')).body.orgs;
-  let row = list.find((o) => o.id === made.body.org.id);
+  let row = (await master.c.get('/api/platform/orgs')).body.orgs.find((o) => o.id === made.body.org.id);
   assert.equal(row.tier, 'community');
-  assert.equal(row.owners, null);
   assert.equal(row.pendingOwners, ownerEmail);
 
-  // The customer opens the link, sets a password and lands in their org as owner.
   const customer = client();
   const token = made.body.link.split('#invite=')[1];
-  const info = await customer.get(`/api/auth/invite/${token}`);
-  assert.equal(info.body.organization, 'Eastside Run Club');
-  assert.equal(info.body.role, 'owner');
+  assert.equal((await customer.get(`/api/auth/invite/${token}`)).body.role, 'owner');
   assert.equal((await customer.post('/api/auth/invite/accept', { token, password: 'another long phrase', name: 'Dana' })).status, 200);
   const me = (await customer.get('/api/auth/me')).body;
   assert.equal(me.session.orgId, made.body.org.id);
@@ -293,23 +577,14 @@ t('WRTS admin console: hidden from others, creates orgs with owner set-up links'
   assert.equal(me.user.isPlatformAdmin, false);
   assert.equal((await customer.get('/api/platform/orgs')).status, 404);
 
-  list = (await admin.get('/api/platform/orgs')).body.orgs;
-  row = list.find((o) => o.id === made.body.org.id);
+  row = (await master.c.get('/api/platform/orgs')).body.orgs.find((o) => o.id === made.body.org.id);
   assert.equal(row.owners, ownerEmail);
-  assert.equal(row.members, 1);
-
-  const detail = await admin.get(`/api/platform/orgs/${made.body.org.id}`);
-  assert.equal(detail.body.members[0].email, ownerEmail);
-  assert.equal((await admin.get('/api/platform/orgs/org_missing')).status, 404);
-
-  assert.equal((await admin.patch(`/api/platform/orgs/${made.body.org.id}`, { tier: 'enterprise' })).status, 200);
-  assert.equal((await admin.patch(`/api/platform/orgs/${made.body.org.id}`, { tier: 'gold' })).status, 400);
-  assert.equal((await admin.patch('/api/platform/orgs/org_missing', { tier: 'pro' })).status, 404);
-
-  const again = await admin.post(`/api/platform/orgs/${made.body.org.id}/owner-invite`, { email: 'second-owner@example.org' });
-  assert.equal(again.status, 201);
-  assert.match(again.body.link, /#invite=/);
-  cfg.platformAdmins.length = 0;
+  assert.equal((await master.c.get(`/api/platform/orgs/${made.body.org.id}`)).body.members[0].email, ownerEmail);
+  assert.equal((await master.c.get('/api/platform/orgs/org_missing')).status, 404);
+  assert.equal((await master.c.patch(`/api/platform/orgs/${made.body.org.id}`, { tier: 'enterprise' })).status, 200);
+  assert.equal((await master.c.patch(`/api/platform/orgs/${made.body.org.id}`, { tier: 'gold' })).status, 400);
+  assert.equal((await master.c.patch('/api/platform/orgs/org_missing', { tier: 'pro' })).status, 404);
+  assert.equal((await master.c.post(`/api/platform/orgs/${made.body.org.id}/owner-invite`, { email: 'second-owner@example.org' })).status, 201);
 });
 
 test('event pages for search and AI: escaped tags and schema.org Event data', () => {

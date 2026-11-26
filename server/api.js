@@ -13,7 +13,7 @@ const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 /** Fields of an event a new-event request may set. */
 const CREATE_KEYS = ['name', 'typeId', 'format', 'purpose', 'purposeOther', 'fourWs', 'primaryW', 'audience', 'date', 'location', 'expected', 'cap', 'price', 'visibility', 'description', 'organization', 'cause', 'contact', 'features', 'programming', 'communityPartners', 'revenueGoal', 'budgetGoal', 'outcomes', 'templateId', 'phase', 'status', 'checklist', 'sponsors', 'seriesId', 'priorEventId', 'budget', 'risks', 'carryOver'];
 
-export function apiRouter(db, cfg, mailer) {
+export function apiRouter(db, cfg, outbox) {
   const r = Router();
   r.use(requireOrg);
 
@@ -68,10 +68,17 @@ export function apiRouter(db, cfg, mailer) {
     const token = randomToken();
     await db.query("INSERT INTO tokens (token_hash, kind, email, organization_id, role, created_by, expires_at) VALUES (:h, 'invite', :e, :o, :r, :u, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 7 DAY))", { h: sha256(token), e: email, o: req.session.orgId, r: role, u: req.user.id });
     const link = `${cfg.publicUrl}/#invite=${token}`;
-    const sent = await mailer.send({ to: email, subject: `You're invited to ${org.name} on EventOS`, text: `${req.user.name || req.user.email} invited you to join ${org.name} on EventOS as ${ROLES[role].label}.\n\nAccept here (valid for 7 days):\n${link}` });
+    await outbox.queue({
+      kind: 'org.invite',
+      to: email,
+      subject: `You're invited to ${org.name} on EventOS`,
+      body: `${req.user.name || req.user.email} invited you to join ${org.name} on EventOS as ${ROLES[role].label}.\n\nAccept here (valid for 7 days):\n${link}\n\nNew EventOS accounts are approved by We Run These Streetz before first sign-in.`,
+      relatedEntity: 'organization',
+      relatedId: req.session.orgId,
+    });
     await audit(db, { orgId: req.session.orgId, userId: req.user.id, action: 'member.invite', detail: { email, role }, ip: req.ip });
     // When email is not configured the owner gets the link to pass on themselves.
-    res.status(201).json({ ok: true, emailed: sent.queued, link: sent.queued ? undefined : link });
+    res.status(201).json({ ok: true, emailed: cfg.mailConfigured, link: cfg.mailConfigured ? undefined : link });
   }));
 
   r.patch('/members/:userId', need('org.admin'), wrap(async (req, res) => {
