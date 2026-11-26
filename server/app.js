@@ -14,7 +14,7 @@ import { seoPages } from './seo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-export function createApp({ db, cfg, mailer, fetchImpl }) {
+export function createApp({ db, cfg, mailer, outbox, fetchImpl }) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1); // Hostinger terminates TLS in front of the app
@@ -36,7 +36,7 @@ export function createApp({ db, cfg, mailer, fetchImpl }) {
   app.get('/api/health', async (req, res) => {
     try {
       await db.query('SELECT 1');
-      res.json({ ok: true, db: 'up', mail: mailer.configured ? 'configured' : 'not configured', signupOpen: cfg.signupOpen });
+      res.json({ ok: true, db: 'up', mail: mailer.configured ? 'configured' : 'not configured', accountRequests: 'open', demo: cfg.demoEnabled });
     } catch {
       res.status(503).json({ ok: false, db: 'down' });
     }
@@ -44,12 +44,12 @@ export function createApp({ db, cfg, mailer, fetchImpl }) {
 
   app.use('/api/webhooks', webhookRouter(db, cfg));
   app.use('/api/public', publicRouter(db, cfg, { fetchImpl }));
-  app.use('/api', sessionMiddleware(db, cfg));
-  app.use('/api/auth', authRouter(db, cfg, mailer));
-  app.use('/api/platform', platformRouter(db, cfg, mailer));
+  app.use('/api', sessionMiddleware(db));
+  app.use('/api/auth', authRouter(db, cfg, outbox));
+  app.use('/api/platform', platformRouter(db, cfg, outbox));
   app.use('/api', integrationsRouter(db, cfg, { fetchImpl: fetchImpl ?? fetch }));
   app.use('/api', participantsRouter(db, cfg));
-  app.use('/api', apiRouter(db, cfg, mailer));
+  app.use('/api', apiRouter(db, cfg, outbox));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 
   // Built frontend. /e/:slug and every other non-API route serve the app shell.

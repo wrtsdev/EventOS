@@ -2,8 +2,25 @@ import { useStore } from '../store.jsx';
 import { FOUR_W_LIST } from '../domain/fourW.js';
 import { Card, Bars, WChip, Progress, formatDate } from '../components/ui.jsx';
 
+function PassportNotYet() {
+  return (
+    <div className="stack-lg fade-in">
+      <header className="page-head">
+        <div className="eyebrow">Participant Passport</div>
+        <h1>WRTS Passport</h1>
+        <p className="lede">One continuous record of each participant’s engagement across Wealth, Wellness, Wisdom and Work.</p>
+      </header>
+      <Card title="Insufficient data">
+        <p style={{ marginTop: 0 }}>Passport records will appear here once participants have verified activity in EventOS: registrations, check-ins, completed sessions and certificates from your events.</p>
+        <p className="small muted" style={{ marginBottom: 0 }}>Participant-controlled Passport accounts are part of the next development phase. No sample records are shown in a real organization.</p>
+      </Card>
+    </div>
+  );
+}
+
 export default function Passport() {
-  const { state, navigate } = useStore();
+  const { state, navigate, isLive } = useStore();
+  if (isLive) return <PassportNotYet />;
   const pp = state.passport;
   const miles = pp.events.reduce((a, e) => a + e.miles, 0);
   const wCounts = FOUR_W_LIST.map((w) => ({ label: w.name, value: pp.events.filter((e) => e.fourWs.includes(w.id)).length, color: `var(--w-${w.id})` }));

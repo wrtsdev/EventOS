@@ -17,7 +17,7 @@ const USES = [
 ];
 
 export default function Privacy() {
-  const { state, dispatch } = useStore();
+  const { state, dispatch, isLive } = useStore();
   const pv = state.passport.privacy;
 
   return (
@@ -29,6 +29,13 @@ export default function Privacy() {
       </header>
 
       <div className="grid-2">
+        {isLive ? (
+          <Card title="Participant choices">
+            <p style={{ marginTop: 0 }}>Each participant makes these choices when they register, and their answers are stored with the registration:</p>
+            <ul className="bullets">{CHOICES.map((c) => <li key={c.id}><strong>{c.label}.</strong> {c.detail}</li>)}</ul>
+            <p className="small muted" style={{ marginBottom: 0 }}>Participant-managed consent settings arrive with Passport accounts in the next development phase.</p>
+          </Card>
+        ) : (
         <Card title={`Your choices · ${state.passport.name}`}>
           {CHOICES.map((c) => (
             <label key={c.id} className="toggle-row" htmlFor={'pv-' + c.id}>
@@ -38,6 +45,7 @@ export default function Privacy() {
           ))}
           <p className="small muted" style={{ marginTop: 10 }}>Every change is stored as a consent record with a timestamp, and takes effect on the next data sync.</p>
         </Card>
+        )}
         <Card title="What EventOS never infers">
           <ul className="bullets">
             <li>Health conditions</li>

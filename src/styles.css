@@ -760,6 +760,37 @@ table.t td .inline-input { max-width: 120px; }
   .admin-search { max-width: none; }
 }
 
+/* ---------- Account requests and two-step sign-in ---------- */
+.pillar-pick { border: 0; padding: 0; margin: 0; }
+.pillar-pick legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; padding: 0; }
+.chip-radio { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border: 1.5px solid var(--line); border-radius: 999px; font-weight: 600; cursor: pointer; background: var(--surface); }
+.chip-radio input { position: absolute; opacity: 0; pointer-events: none; }
+.chip-radio.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.chip-radio:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.otp-input { font-size: 22px !important; letter-spacing: 0.3em; font-variant-numeric: tabular-nums; max-width: 220px; }
+.mfa-setup { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start; }
+.mfa-qr { background: #fff; padding: 8px; border-radius: var(--r-sm); border: 1px solid var(--line); }
+.mfa-key { word-break: break-all; }
+.recovery-codes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.recovery-codes code { display: block; padding: 8px 10px; background: var(--surface-2); border-radius: var(--r-sm); font-size: 15px; text-align: center; }
+@media (max-width: 560px) { .mfa-setup { grid-template-columns: 1fr; } }
+
+/* ---------- Admin center ---------- */
+.card-head .inline-input, .card-head .admin-search { width: auto; }
+.tab-count { display: inline-block; min-width: 20px; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; text-align: center; }
+.admin-attention li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.admin-attention li:first-child { border-top: 0; }
+.admin-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.admin-dl dt { color: var(--muted); font-size: 13.5px; }
+.admin-dl dd { margin: 0; white-space: pre-wrap; }
+.admin-decide { padding-top: 12px; border-top: 1px solid var(--line); }
+.admin-actions { gap: 2px; justify-content: flex-end; flex-wrap: wrap; }
+.btn.danger { color: var(--bad); }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td, tr.clickable:focus td { background: var(--surface-2); }
+tr.selected td { background: var(--accent-soft); }
+@media (max-width: 560px) { .admin-dl { grid-template-columns: 1fr; } .admin-dl dt { margin-top: 6px; } }
+
 /* ---------- iPhone ---------- */
 /* iOS zooms the page when a field under 16px gets focus. */
 @media (pointer: coarse) {

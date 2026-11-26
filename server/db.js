@@ -54,14 +54,15 @@ export function makeDb(pool) {
 }
 
 /** Applies server/migrations/*.sql in order, once each. */
-export async function migrate(pool, log = console.log) {
+/** `only` limits the run to the named files (tests use it to recreate an older database). */
+export async function migrate(pool, log = console.log, { only = null } = {}) {
   await pool.query('CREATE TABLE IF NOT EXISTS schema_migrations (name VARCHAR(190) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   const [done] = await pool.query('SELECT name FROM schema_migrations');
   const applied = new Set(done.map((r) => r.name));
   const dir = join(here, 'migrations');
   const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
   for (const f of files) {
-    if (applied.has(f)) continue;
+    if (applied.has(f) || (only && !only.includes(f))) continue;
     const sql = readFileSync(join(dir, f), 'utf8');
     const statements = sql.split(/;\s*$/m).map((s) => s.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n').trim()).filter(Boolean);
     const conn = await pool.getConnection();

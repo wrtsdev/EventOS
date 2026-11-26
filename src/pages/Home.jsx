@@ -19,7 +19,7 @@ const FILTERS = [
 ];
 
 export default function Home() {
-  const { navigate, org, events, dispatch } = useStore();
+  const { navigate, org, events, dispatch, isLive } = useStore();
   const o = org ?? SAMPLE_ORG;
   const [filter, setFilter] = useState('all');
 
@@ -55,7 +55,8 @@ export default function Home() {
           <p className="muted">The Event Builder walks you through purpose, the 4Ws, budget and safety. You will get an Event Charter and an EPIC readiness plan at the end.</p>
           <div className="row">
             <button className="btn btn-primary" onClick={() => navigate('builder')}>Open the Event Builder</button>
-            <button className="btn btn-secondary" onClick={() => dispatch({ type: 'setSession', session: { orgId: SAMPLE_ORG.id, role: 'owner' } })}>Look around the demo organization</button>
+            {/* Sample data never appears inside a real organization's account. */}
+            {!isLive && <button className="btn btn-secondary" onClick={() => dispatch({ type: 'setSession', session: { orgId: SAMPLE_ORG.id, role: 'owner' } })}>Look around the demo organization</button>}
           </div>
         </section>
       ) : (

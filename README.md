@@ -65,6 +65,11 @@ docs/          EPIC_EXPANSION.md (gap analysis, scoring spec, status, backlog), 
 
 ## Read next
 
+- **`docs/PRODUCTION_READINESS.md`**: EventOS 1.0 status, feature register, release checks, blockers and the continuation plan.
+- **`docs/ADMIN_GUIDE.md`**: the master administrator guide (approvals, accounts, two-step verification).
+- `docs/SECURITY_AND_ROLES.md`: account states, roles and permissions, sign-in protections, owner recovery.
+- `docs/DATA_CLEANUP.md`: what the identity migration changes, backup, rollback and approved cleanup.
+- `docs/API_IDENTITY.md`: account and admin center API.
 - **`docs/IOS.md`**: the iPhone app, Apple account setup, and making TestFlight builds.
 - `docs/DEPLOY.md`: running the production server on Hostinger.
 - **`docs/EPIC_EXPANSION.md`** — audit, gap analysis, EPIC scoring spec, integration status, deployment and rollback, backlog, commercialization readiness, and exactly what is operational vs. incomplete.
