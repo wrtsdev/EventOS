@@ -1,0 +1,83 @@
+import { log } from './log.js';
+import express from 'express';
+import compression from 'compression';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { securityHeaders, csrfGuard } from './security.js';
+import { sessionMiddleware, authRouter } from './auth.js';
+import { apiRouter } from './api.js';
+import { participantsRouter, publicRouter } from './participants.js';
+import { integrationsRouter, webhookRouter } from './integrations.js';
+import { platformRouter } from './platform.js';
+import { seoPages } from './seo.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+export function createApp({ db, cfg, mailer, outbox, fetchImpl }) {
+  const app = express();
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1); // Hostinger terminates TLS in front of the app
+
+  if (cfg.isProd) {
+    // Hostinger terminates TLS in front of the app; send plain-HTTP visitors to HTTPS.
+    app.use((req, res, next) => (req.headers['x-forwarded-proto'] === 'http' ? res.redirect(301, `https://${req.headers.host}${req.originalUrl}`) : next()));
+  }
+  app.use(securityHeaders);
+  app.use(compression()); // gzip HTML, JS, CSS and JSON (about 70% smaller)
+  // Raw body for webhook signature checks; JSON for everything else.
+  app.use('/api/webhooks', express.text({ type: '*/*', limit: '1mb' }), (req, res, next) => {
+    req.rawBody = typeof req.body === 'string' ? req.body : '';
+    next();
+  });
+  app.use(express.json({ limit: '2mb' }));
+  app.use(csrfGuard(cfg.publicUrl));
+
+  app.get('/api/health', async (req, res) => {
+    try {
+      await db.query('SELECT 1');
+      res.json({ ok: true, db: 'up', mail: mailer.configured ? 'configured' : 'not configured', accountRequests: 'open', demo: cfg.demoEnabled });
+    } catch {
+      res.status(503).json({ ok: false, db: 'down' });
+    }
+  });
+
+  app.use('/api/webhooks', webhookRouter(db, cfg));
+  app.use('/api/public', publicRouter(db, cfg, { fetchImpl }));
+  app.use('/api', sessionMiddleware(db));
+  app.use('/api/auth', authRouter(db, cfg, outbox));
+  app.use('/api/platform', platformRouter(db, cfg, outbox));
+  app.use('/api', integrationsRouter(db, cfg, { fetchImpl: fetchImpl ?? fetch }));
+  app.use('/api', participantsRouter(db, cfg));
+  app.use('/api', apiRouter(db, cfg, outbox));
+  app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
+
+  // Built frontend. /e/:slug and every other non-API route serve the app shell.
+  const dist = join(here, '..', 'dist');
+  const pages = seoPages(db, cfg, join(dist, 'index.html'));
+  app.get('/sitemap.xml', pages.sitemap); // needs only the database, not the built frontend
+  if (existsSync(dist)) {
+    app.get('/e/:slug', pages.eventPage);
+    // Vite's hashed files never change, so browsers keep them for a year. Everything
+    // else (logos, robots.txt, llms.txt) keeps its name when edited: one day.
+    app.use(express.static(dist, {
+      index: false,
+      setHeaders: (res, path) => {
+        if (path.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+        else if (/[\\/]assets[\\/][^\\/]+-[\w-]{8}\.(js|css|woff2?)$/.test(path)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        else res.setHeader('Cache-Control', 'public, max-age=86400');
+      },
+    }));
+    app.get('*', pages.appShell);
+  }
+
+  // Errors: log details server-side, return a plain message.
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    const status = err.status && err.status < 600 ? err.status : 500;
+    if (status >= 500) log.error('request failed', { path: req.path, error: String(err?.stack || err) });
+    res.status(status).json({ error: status >= 500 && status !== 502 ? 'Something went wrong. Try again.' : err.message });
+  });
+
+  return app;
+}

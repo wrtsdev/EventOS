@@ -86,12 +86,15 @@ export function communityValueIndex(rates) {
 }
 
 export function formatMoney(n, { compact = false } = {}) {
-  if (compact && Math.abs(n) >= 1000) {
-    return '$' + (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, '') + 'K';
+  const sign = n < 0 ? '\u2212' : '';
+  const a = Math.abs(n);
+  if (compact && a >= 1000) {
+    return sign + '$' + (a / 1000).toFixed(a >= 100000 ? 0 : 1).replace(/\.0$/, '') + 'K';
   }
-  return '$' + Math.round(n).toLocaleString('en-US');
+  return sign + '$' + Math.round(a).toLocaleString('en-US');
 }
 
 export function pct(n, digits = 0) {
+  if (n == null || Number.isNaN(n)) return '—';
   return (n * 100).toFixed(digits) + '%';
 }

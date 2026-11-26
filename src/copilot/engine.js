@@ -3,6 +3,14 @@
 // model (or an MCP-connected agent) replace it later with the same context.
 
 import { readiness, commsTimeline, buildBlueprint, volunteerNeed, isPhysical } from '../domain/blueprint.js';
+import { epicScore, EPIC_ORDER, EPIC_DOMAINS } from '../domain/epic.js';
+import { applicableChecklist } from '../domain/controls.js';
+import { financeView } from '../domain/finance.js';
+import { workforceSummary } from '../domain/workforce.js';
+import { commsSummary } from '../domain/comms.js';
+import { outcomesView } from '../domain/civic.js';
+import { SPONSOR_PACKAGES, fulfillment } from '../domain/sponsors.js';
+import { draftAAR } from '../domain/aar.js';
 import { FOUR_WS } from '../domain/fourW.js';
 import { getEventType } from '../domain/catalog.js';
 import { formatMoney, pct } from '../domain/metrics.js';
@@ -22,11 +30,30 @@ export const SUGGESTED_QUESTIONS = [
   'Build my 5K event plan',
   'Create my participant communication timeline',
   'What permits might I need?',
+  'Which EPIC controls apply to this event?',
+  'Where are the bottlenecks?',
+  'Summarize this event',
+  'Draft a sponsor package',
+  'Draft my after-action review',
 ];
+
+/** Answers built only from records vs. recommendations a person must judge. */
+const BASIS = {
+  ready: 'data', todo: 'data', registration: 'data', invite: 'data', sponsor: 'data', interest: 'data', value: 'data',
+  epic: 'data', bottleneck: 'data', summary: 'data',
+  plan: 'suggestion', comms: 'suggestion', permits: 'suggestion', price: 'suggestion', next: 'suggestion', sponsorPackage: 'suggestion', aar: 'suggestion', help: 'data',
+};
+
+export const GUARDRAILS = 'The assistant can suggest and summarize. It cannot approve safety plans, send messages, make payments or change your event. A person with the right role does those.';
 
 const has = (q, ...words) => words.some((w) => q.includes(w));
 
 const INTENTS = [
+  { id: 'aar', test: (q) => has(q, 'after-action', 'after action', 'aar', 'debrief', 'lessons') },
+  { id: 'sponsorPackage', test: (q) => has(q, 'package', 'sponsor deck', 'sponsor proposal') },
+  { id: 'epic', test: (q) => has(q, 'epic', 'control') },
+  { id: 'bottleneck', test: (q) => has(q, 'bottleneck', 'stuck', 'slowing', 'behind') },
+  { id: 'summary', test: (q) => has(q, 'summar', 'overview', 'how is', 'how are we doing') },
   { id: 'permits', test: (q) => has(q, 'permit', 'insurance', 'ems', 'legal', 'safety', 'police', 'medical', 'waiver') },
   { id: 'comms', test: (q) => has(q, 'communication', 'timeline', 'email', 'emails', 'message') },
   { id: 'plan', test: (q) => has(q, 'plan', 'build my', 'schedule') && !has(q, 'next event') },
@@ -53,7 +80,7 @@ export function localRulesProvider(ctx) {
     label: 'Prototype answers from your event data',
     async answer(question) {
       const intent = detectIntent(question);
-      return { intent, ...(HANDLERS[intent] ?? HANDLERS.help)(ctx) };
+      return { intent, basis: BASIS[intent] ?? 'suggestion', ...(HANDLERS[intent] ?? HANDLERS.help)(ctx) };
     },
   };
 }
@@ -85,6 +112,9 @@ const HANDLERS = {
   registration({ sim, event }) {
     if (!sim.registered) {
       return { title: 'Registration', blocks: [p('Registration has not opened yet. When it does, EventOS will show where people drop off between viewing your page and paying.'), p('Before you open: set an early price, give team captains a link, and ask your cause partner to share the page.')] };
+    }
+    if (!sim.funnel.length) {
+      return { title: 'Registration', blocks: [p(`${sim.registered} of ${sim.goal} registered (${pct(sim.goal ? sim.registered / sim.goal : 0)}).${sim.payments?.pending ? ` ${sim.payments.pending} people started paying but did not finish.` : ''}`), p('Page views are not tracked yet, so EventOS cannot show where visitors drop off. Share the public page with team captains and partners, and follow up on unfinished payments.')], link: { label: 'Open Command Center', tab: 'overview' } };
     }
     const f = sim.funnel;
     const step = f.findIndex((s) => s.stage === sim.leakStage);
@@ -124,6 +154,7 @@ const HANDLERS = {
   },
   sponsor({ sim }) {
     if (!sim.sponsors.length) return { title: 'Sponsors', blocks: [p('This event has no sponsors yet. Add sponsor visibility in the Event Builder to see suggested partners for your 4W focus.')] };
+    if (sim.live) return { title: 'Sponsor performance', blocks: [p('Sponsor visibility (impressions, booth visits, promo codes, survey recall) is not tracked yet for live events. Track each sponsor\u2019s deliverables in Sponsors so renewals rest on what was delivered.')], link: { label: 'Open sponsors', tab: 'sponsors' } };
     const ranked = [...sim.sponsors].sort((a, b) => b.boothVisits + b.registrations * 3 - (a.boothVisits + a.registrations * 3));
     const top = ranked[0];
     return {
@@ -247,6 +278,86 @@ const HANDLERS = {
         p('PLV counts only economic contribution. Volunteering and cause engagement are measured in the Community Value Index, never in dollars.'),
       ],
       link: { label: 'Open Value', tab: 'value' },
+    };
+  },
+  epic({ event, sim, org }) {
+    const items = applicableChecklist(event, sim, { includeAll: true });
+    const sc = epicScore(event, sim, org);
+    return {
+      title: 'EPIC controls for this event',
+      blocks: [
+        p(`${items.length} controls apply, scaled to a ${event.expected}-person ${isPhysical(event) ? 'in-person' : 'virtual'} event. Current EPIC score ${sc.composite ?? '–'} with ${sc.critical.length} critical items open.`),
+        list(EPIC_ORDER.map((d) => { const l = items.filter((i) => i.epic === d); return `${EPIC_DOMAINS[d].name}: ${l.length} controls, ${l.filter((i) => i.weight === 'critical').length} critical, ${l.filter((i) => i.status === 'done').length} done`; })),
+        p('Most urgent:'),
+        list(sc.critical.slice(0, 5).map((c) => `${c.title} (${c.detail})`)),
+      ],
+      link: { label: 'Open readiness', tab: 'blueprint' },
+    };
+  },
+  bottleneck({ event, sim }) {
+    const r = readiness(event, sim);
+    const fin = financeView(event, sim);
+    const wf = workforceSummary(event, fin);
+    const c = commsSummary(event);
+    const owners = {};
+    for (const i of r.missing) owners[i.owner] = (owners[i.owner] ?? 0) + 1;
+    const top = Object.entries(owners).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    return {
+      title: 'Where things are stuck',
+      blocks: [
+        p('Open items by owner:'),
+        list(top.map(([o, n]) => `${o}: ${n} open`)),
+        list([
+          wf.leadsWithoutBackup.length ? `${wf.leadsWithoutBackup.length} leads have no backup` : 'Every lead has a backup',
+          c.drafts.length ? `${c.drafts.length} messages waiting for approval` : 'No messages waiting for approval',
+          c.openQuestions.length ? `${c.openQuestions.length} participant questions unanswered` : 'No open questions',
+          fin.flags.length ? `${fin.flags.length} finance flags: ${fin.flags.map((f) => f.title.toLowerCase()).slice(0, 2).join('; ')}` : 'No finance flags',
+        ]),
+      ],
+      link: { label: 'Open Command Center', tab: 'overview' },
+    };
+  },
+  summary({ event, sim, org }) {
+    const sc = epicScore(event, sim, org);
+    const fin = financeView(event, sim);
+    const o = outcomesView(event, sim);
+    return {
+      title: `${event.name} at a glance`,
+      blocks: [
+        list([
+          `Phase: ${event.status === 'canceled' ? 'canceled' : event.phase}. ${sim.registered ? `${sim.registered} of ${sim.goal} registered.` : `Goal ${sim.goal} participants.`}`,
+          `EPIC operational score ${sc.composite ?? '–'} (${sc.band}); ${sc.critical.length} critical items open; ${Math.round(sc.coverage * 100)}% assessed.`,
+          `Planned net ${formatMoney(fin.planned.net)}${fin.actual ? `; actual so far ${formatMoney(fin.actual.net)}` : ''}. Local vendor spending ${formatMoney(fin.local.spend)}.`,
+          `4W outcomes: ${o.measured} of ${o.total} measured, ${o.verified} verified.`,
+        ]),
+      ],
+      link: { label: 'Open scorecard', tab: 'scorecard' },
+    };
+  },
+  sponsorPackage({ event, sim }) {
+    const n = event.expected;
+    const ful = fulfillment(event);
+    return {
+      title: 'Draft sponsor package',
+      blocks: [
+        p(`For ${event.name}: about ${n} participants${event.fourWs?.length ? `, focused on ${event.fourWs.map((w) => FOUR_WS[w].name).join(' + ')}` : ''}${event.cause ? `, benefiting ${event.cause}` : ''}.`),
+        list(SPONSOR_PACKAGES.map((pk) => `${pk.name}${pk.price ? ` · ${formatMoney(pk.price)}` : ''}: ${pk.benefits.slice(0, 4).join(', ')}`)),
+        p(sim.registered ? `Proof you can offer: ${sim.registered} registered so far, ${ful.rate != null ? Math.round(ful.rate * 100) + '% of deliverables met' : 'deliverables tracked'}, measured booth and promo-code results after the event.` : 'Offer measured results (booth visits, promo codes, survey recall), not just logo placement.'),
+      ],
+      link: { label: 'Open sponsors', tab: 'sponsors' },
+    };
+  },
+  aar({ event, sim, org }) {
+    if (event.phase !== 'complete') return { title: 'After Action Review', blocks: [p('The review opens after the event. Until then, keep the operations log on event day; it feeds the review.')] };
+    const d = draftAAR(event, sim, org);
+    return {
+      title: 'Draft After Action Review',
+      blocks: [
+        p('What went well:'), list(d.wentWell.split('\n').filter(Boolean)),
+        p('What to improve:'), list(d.improve.split('\n').filter(Boolean)),
+        p('Suggested corrective actions:'), list(d.actions.map((a) => `${a.action} (${a.owner})`)),
+      ],
+      link: { label: 'Open After Action Review', tab: 'aar' },
     };
   },
   help() {

@@ -36,7 +36,7 @@
  * @property {string} id
  * @property {string} name
  * @property {AdapterCategory} category
- * @property {'connected'|'available'|'planned'} status
+ * @property {'live'|'mock'|'not-connected'|'planned'} status
  * @property {string[]} capabilities           what the adapter can import or export
  * @property {() => Promise<any[]>} [fetchRaw] mock: returns vendor-shaped records
  * @property {(raw:any) => CanonicalParticipant|CanonicalResult} [normalize]

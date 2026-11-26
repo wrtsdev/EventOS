@@ -1,126 +1,88 @@
-import { useMemo } from 'react';
-import { buildBlueprint } from '../../domain/blueprint.js';
-import { EXPERIENCE_FEATURES } from '../../domain/catalog.js';
-import { FOUR_WS } from '../../domain/fourW.js';
-import { Ring, Card, SafetyNote, WChip, readinessTone } from '../../components/ui.jsx';
+import { useMemo, useState } from 'react';
+import { useStore } from '../../store.jsx';
+import { readiness, stageReviews } from '../../domain/controls.js';
+import { epicScore, EPIC_DOMAINS, EPIC_ORDER, reviewSnapshot } from '../../domain/epic.js';
+import { Ring, Card, SafetyNote, EpicChip, readinessTone } from '../../components/ui.jsx';
 import { Checklist } from './Checklist.jsx';
 
-export default function Blueprint({ event }) {
-  const bp = useMemo(() => buildBlueprint(event), [event]);
-  const r = bp.readiness;
-  const prog = (event.programming ?? [])
-    .map((id) => Object.values(FOUR_WS).flatMap((w) => w.programming.map((p) => ({ ...p, fourW: w.id }))).find((p) => p.id === id))
-    .filter(Boolean);
+export default function Blueprint({ event, sim }) {
+  const { org, dispatch, can, role } = useStore();
+  const r = useMemo(() => readiness(event, sim), [event, sim]);
+  const score = useMemo(() => epicScore(event, sim, org), [event, sim, org]);
+  const reviews = useMemo(() => stageReviews(event, sim), [event, sim]);
+  const defaultStage = event.phase === 'complete' ? 'closure' : event.phase === 'eventday' ? 'eventday' : 't30';
+  const [stage, setStage] = useState(defaultStage);
+  const [groupBy, setGroupBy] = useState('epic');
+  const review = reviews.find((x) => x.id === stage);
+
+  const record = () => {
+    const snap = reviewSnapshot(event, sim, org, stage, org?.coordinator || role);
+    dispatch({ type: 'updateEvent', id: event.id, patch: (e) => ({ reviews: [...(e.reviews ?? []).filter((x) => x.stage !== stage), snap] }), toast: `${review.label} recorded` });
+  };
 
   return (
     <div className="stack-lg">
       <section className="card">
         <div className="row" style={{ alignItems: 'flex-start', gap: 20 }}>
-          <Ring value={r.score} label={r.score + '%'} caption="Ready" size={128} stroke={12} tone={readinessTone(r.score)} />
+          <Ring value={r.score} label={r.score + '%'} caption="Ready" size={124} stroke={12} tone={readinessTone(r.score)} />
           <div className="min0 stack" style={{ flex: 1, gap: 10, minWidth: 220 }}>
             <div>
-              <div className="eyebrow">Smart Event Blueprint</div>
-              <h3 className="display" style={{ fontSize: 30, marginTop: 4 }}>Event readiness: {r.score}%</h3>
+              <div className="eyebrow">EPIC readiness plan</div>
+              <h3 className="display" style={{ fontSize: 30, marginTop: 4 }}>Readiness: {r.score}%</h3>
             </div>
-            <p className="small">{r.done} of {r.items.length} items complete. Tap any status to update it.</p>
-            {r.missing.length > 0 ? (
-              <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>Still missing</div>
-                <div className="row" style={{ gap: 6 }}>
-                  {r.missing.map((i) => <span key={i.id} className={`pill ${i.status === 'blocking' ? 'bad' : 'warn'}`}>{i.label}</span>)}
-                </div>
+            <p className="small">{r.done} of {r.items.length} controls complete for this phase. {r.unassessed.length ? `${r.unassessed.length} not assessed yet; they count as zero, never as done.` : 'Every control has been assessed.'}</p>
+            {score.critical.length > 0 && (
+              <div className="banner bad">
+                <span className="min0"><strong>{score.critical.length} critical items open.</strong> These stay visible no matter how good the overall score looks.
+                  <ul className="bullets small" style={{ marginTop: 6 }}>{score.critical.slice(0, 6).map((c) => <li key={c.id}><EpicChip id={c.epic} /> {c.title} <span className="muted">({c.detail})</span></li>)}</ul>
+                </span>
               </div>
-            ) : <span className="pill good">Everything is in place</span>}
+            )}
           </div>
         </div>
       </section>
 
-      <div className="grid-2">
-        <Card title="Experience">
-          <dl className="kv">
-            <dt>Distance</dt><dd>{bp.experience.distance}</dd>
-            <dt>Event type</dt><dd>{bp.experience.eventType}</dd>
-            <dt>Format</dt><dd>{bp.experience.format}</dd>
-            <dt>Audience</dt><dd>{bp.experience.audience}</dd>
-            <dt>Expected participants</dt><dd>{bp.experience.expected}</dd>
-          </dl>
-        </Card>
-        <Card title="Purpose">
-          <div className="stack" style={{ gap: 10 }}>
-            <dl className="kv">
-              <dt>Main purpose</dt><dd>{bp.purpose.purpose}</dd>
-              <dt>Beneficiary</dt><dd>{bp.purpose.cause}</dd>
-            </dl>
-            <div className="row" style={{ gap: 6 }}>{bp.purpose.fourWs.map((w) => <WChip key={w.id} id={w.id} />)}</div>
-            <p className="small">{bp.purpose.objective}</p>
-          </div>
-        </Card>
-      </div>
-
-      <Card title="Operations" aside={<span className="small muted">Registration, safety, race day, people</span>}>
+      <Card title="Staged readiness reviews" aside={<span className="small muted">Pick a checkpoint</span>}>
         <div className="stack">
-          <SafetyNote />
-          <Checklist event={event} items={bp.operations} />
-        </div>
-      </Card>
-
-      <div className="grid-2">
-        <Card title="Engagement">
-          <div className="stack" style={{ gap: 12 }}>
-            <dl className="kv">
-              <dt>Teams</dt><dd>{bp.engagement.teams ? 'On' : 'Off'}</dd>
-              <dt>Challenges</dt><dd>{bp.engagement.challenges ? 'On' : 'Off'}</dd>
-              <dt>Sponsors</dt><dd>{bp.engagement.sponsors ? 'On' : 'Off'}</dd>
-              <dt>Volunteers needed</dt><dd>{bp.engagement.volunteers}</dd>
-            </dl>
-            {bp.engagement.partners.length > 0 && (
-              <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>Community partners to invite</div>
-                <ul className="bullets small">{bp.engagement.partners.map((p) => <li key={p}>{p}</li>)}</ul>
-              </div>
-            )}
-            {prog.length > 0 && (
-              <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>4W programming</div>
-                <ul className="list-plain small">{prog.map((p) => <li key={p.id} className="row" style={{ gap: 6 }}><WChip id={p.fourW} /> {p.label}</li>)}</ul>
-              </div>
-            )}
-            <div className="small muted">Features: {(event.features ?? []).map((id) => EXPERIENCE_FEATURES.find((f) => f.id === id)?.label).filter(Boolean).join(', ')}</div>
-          </div>
-        </Card>
-        <Card title="What should happen when">
-          <ul className="timeline">
-            {bp.engagement.comms.map((c) => (
-              <li key={c.when}>
-                <div className="eyebrow">{c.when}</div>
-                <div style={{ fontWeight: 700 }}>{c.title}</div>
-                <div className="small muted">{c.detail}</div>
-              </li>
+          <div className="subtabs" role="group" aria-label="Review stage">
+            {reviews.map((s) => (
+              <button key={s.id} aria-pressed={stage === s.id} onClick={() => setStage(s.id)}>
+                {s.short} · {s.done}/{s.items.length}{s.critical.length ? ` · ${s.critical.length}!` : ''}
+              </button>
             ))}
-          </ul>
-        </Card>
-      </div>
-
-      <Card title="Impact plan">
-        <div className="grid-2">
-          <div>
-            <div className="eyebrow" style={{ marginBottom: 6 }}>Success metrics</div>
-            <ul className="bullets small">{bp.impact.metrics.map((m) => <li key={m}>{m}</li>)}{bp.impact.causeOutcomes.map((m) => <li key={m}>{m}</li>)}</ul>
           </div>
-          <div>
-            <div className="eyebrow" style={{ marginBottom: 6 }}>Survey questions</div>
-            <ul className="bullets small">{bp.impact.survey.map((m) => <li key={m}>{m}</li>)}</ul>
+          <div className="spread">
+            <p className="small">
+              <strong>{review.label}:</strong> {review.outstanding.length ? `${review.outstanding.length} outstanding, ${review.critical.length} critical.` : 'everything due by this checkpoint is complete.'}
+              {review.recorded && <span className="muted"> Last recorded {new Date(review.recorded.at).toLocaleDateString()} by {review.recorded.by}: EPIC {review.recorded.composite}, {review.recorded.criticalOpen} critical open.</span>}
+            </p>
+            {can('event.edit') && <button className="btn btn-secondary btn-sm" onClick={record}>Record this review</button>}
           </div>
-          <div>
-            <div className="eyebrow" style={{ marginBottom: 6 }}>After the event</div>
-            <ul className="bullets small">{bp.impact.postEvent.map((m) => <li key={m}>{m}</li>)}</ul>
+          <div className="subtabs" role="group" aria-label="Group by">
+            <button aria-pressed={groupBy === 'epic'} onClick={() => setGroupBy('epic')}>By EPIC area</button>
+            <button aria-pressed={groupBy === 'status'} onClick={() => setGroupBy('status')}>Outstanding first</button>
           </div>
-          <div>
-            <div className="eyebrow" style={{ marginBottom: 6 }}>Partners and community readiness</div>
-            <Checklist event={event} items={r.items.filter((i) => ['Partners', 'Community impact', 'Participant experience'].includes(i.category))} />
-          </div>
+          {review.items.some((i) => i.informational) && <SafetyNote />}
+          {groupBy === 'epic'
+            ? EPIC_ORDER.map((d) => {
+                const items = review.items.filter((i) => i.epic === d);
+                if (!items.length) return null;
+                const dom = score.domains.find((x) => x.id === d);
+                return (
+                  <section key={d} className="stack" style={{ gap: 4 }}>
+                    <div className="spread" style={{ borderBottom: '2px solid var(--line)', paddingBottom: 6 }}>
+                      <EpicChip id={d} long />
+                      <span className="small muted">{items.filter((i) => i.status === 'done').length}/{items.length} done · area score {dom?.score ?? '–'}</span>
+                    </div>
+                    <Checklist event={event} items={items} showEpic={false} />
+                  </section>
+                );
+              })
+            : <Checklist event={event} items={[...review.outstanding.sort((a, b) => (a.weight === 'critical' ? -1 : 1) - (b.weight === 'critical' ? -1 : 1)), ...review.items.filter((i) => i.status === 'done')]} />}
         </div>
       </Card>
+
+      <p className="small muted">EPIC areas: {EPIC_ORDER.map((d) => EPIC_DOMAINS[d].name).join(' · ')}. Controls are scaled to this event's size, format and risk.</p>
     </div>
   );
 }

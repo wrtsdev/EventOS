@@ -23,6 +23,8 @@ export const EVENT_TYPES = [
   { id: 'wellness-challenge', label: 'Wellness challenge (multi-week)', miles: 30, timed: false, physical: false, audience: 'Members, employees, groups' },
   { id: 'team-challenge', label: 'Team challenge', miles: 20, timed: false, physical: false, audience: 'Workplaces, chapters, congregations' },
   { id: 'hybrid', label: 'Hybrid event', miles: 3.1, timed: true, physical: true, audience: 'Local and remote participants' },
+  { id: 'festival', label: 'Community festival + fun walk', miles: 1, timed: false, physical: true, audience: 'Families, neighbors, local businesses' },
+  { id: 'workshop', label: 'Workshop or learning walk', miles: 0, timed: false, physical: true, audience: 'Learners, members, community groups' },
   { id: 'custom', label: 'Custom movement event', miles: 2, timed: false, physical: true, audience: 'Defined by you' },
 ];
 
@@ -59,42 +61,40 @@ export function getPurpose(id) {
 
 /** Suggest a product tier by size and organization profile. */
 export function suggestTier(expected, eventsPerYear = 1) {
-  if (eventsPerYear >= 4) return 'partner';
-  if (expected > 500) return 'growth';
+  if (eventsPerYear >= 4) return 'enterprise';
+  if (expected > 500) return 'pro';
   return 'community';
 }
 
+// Proposed commercial configurations: not final prices or public commitments.
 export const TIERS = [
   {
     id: 'community',
     name: 'EventOS Community',
-    audience: 'Small community organizers',
-    size: '50–500 participants',
-    price: 'From $0 + per-registrant fee',
-    includes: ['Guided Event Builder and Blueprint', 'Readiness checklist', 'Participant Passport', 'Impact Report', 'One registration connector'],
+    audience: 'Small and first-time community organizers',
+    size: 'Up to about 500 participants',
+    price: 'Proposed: entry tier',
+    includes: ['Guided Event Builder with 4Ws', 'Registration and Passport', 'Simple budget', 'Safety checklists and staged reviews', 'Foundational 4Ws reporting and Impact Report'],
   },
   {
-    id: 'growth',
-    name: 'EventOS Growth',
+    id: 'pro',
+    name: 'EventOS Pro',
     audience: 'Established races and nonprofit events',
-    size: '500–2,500 participants',
-    price: 'Annual subscription',
-    includes: ['Everything in Community', 'SponsorOS and CauseOS', 'Community Intelligence', 'PLV and Community Value Index', 'HubSpot sync'],
+    size: 'Hundreds to thousands of participants',
+    price: 'Proposed: annual subscription',
+    includes: ['Everything in Community', 'Advanced finance: scenarios, break-even, cash flow', 'Sponsor, vendor and partner management', 'Workforce and volunteer operations', 'EPIC scorecard, Community Intelligence, After Action Review'],
   },
   {
-    id: 'partner',
-    name: 'EventOS Partner',
-    audience: 'Municipalities, employers, associations, nonprofits running many events',
+    id: 'enterprise',
+    name: 'EventOS Enterprise',
+    audience: 'Municipalities, employers, associations and networks running many events',
     size: 'Multi-event, multi-site',
-    price: 'Annual partnership',
-    includes: ['Everything in Growth', 'Portfolio view across events', 'Custom 4W programs', 'Data exports and API', 'Dedicated success lead'],
-  },
-  {
-    id: 'managed',
-    name: 'EventOS Managed',
-    audience: 'Organizations that want WRTS to build the event with them',
-    size: 'Any size',
-    price: 'Technology + event-build services',
-    includes: ['Everything in Partner', 'WRTS event producers on site', 'Vendor, permit and course coordination', 'Sponsor sales support'],
+    price: 'Proposed: annual partnership',
+    includes: ['Everything in Pro', 'Recurring-event trends and organization dashboards', 'Configurable EPIC weights and governance', 'User administration and roles', 'Advanced integrations and consolidated impact reporting'],
   },
 ];
+
+export const MANAGED_SERVICES = {
+  name: 'WRTS Managed Services',
+  detail: 'Add-on to any tier: WRTS event producers plan and run the event with you.',
+};

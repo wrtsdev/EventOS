@@ -2,6 +2,7 @@
 // All names, organizations and figures are fictional examples.
 
 import { getTemplate } from './templates.js';
+import { defaultBudget } from '../domain/finance.js';
 
 export const SAMPLE_ORG = {
   id: 'org-demo',
@@ -12,6 +13,24 @@ export const SAMPLE_ORG = {
   eventsPerYear: 3,
   historicMembers: 860,
   membershipPerParticipant: 12,
+  tier: 'enterprise',
+  assistantEnabled: true,
+  epicWeights: { E: 40, P: 20, I: 20, C: 20 },
+  isSample: true,
+};
+
+/** A second tenant. Its data must never appear in the demo organization's views. */
+export const OTHER_ORG = {
+  id: 'org-eastgate',
+  name: 'Eastgate PTA',
+  type: 'School or PTA',
+  coordinator: 'Pat Morales',
+  email: 'pta@eastgate.example',
+  eventsPerYear: 1,
+  historicMembers: 120,
+  membershipPerParticipant: 0,
+  tier: 'community',
+  assistantEnabled: false,
   isSample: true,
 };
 
@@ -20,44 +39,38 @@ function fromTemplate(templateId, overrides) {
   return {
     ...t.preset,
     templateId,
+    organizationId: SAMPLE_ORG.id,
     organization: SAMPLE_ORG.name,
     contact: SAMPLE_ORG.email,
     visibility: 'public',
+    status: 'active',
     sponsors: [],
     ...overrides,
   };
 }
 
+const done = (ids) => Object.fromEntries(ids.map((k) => [k, 'done']));
+
 export const SAMPLE_EVENTS = [
+  // Validation scenario: Wellness primary, Wealth and Work supporting.
   fromTemplate('wellness-5k', {
     id: 'evt-wellness-5k',
-    name: 'Northside Wellness 5K',
+    name: 'Northside Wellness 5K 2027',
     date: '2027-04-17',
     location: 'Riverside Park Pavilion',
     phase: 'planning',
+    fourWs: ['wellness', 'wealth', 'work'],
+    primaryW: 'wellness',
+    audience: 'Northside families, walkers and first-time runners',
+    revenueGoal: 24000,
+    seriesId: 'series-northside-5k',
+    seed: { risksReviewed: 7, contactsConfirmed: 4 },
+    programming: ['health-screening', 'hydration', 'walking-division', 'wellness-village', 'fin-lit-booth', 'career-row'],
     checklist: {
-      registration: 'done',
-      waiver: 'done',
-      permits: 'done',
-      comms: 'done',
-      cause: 'done',
-      vendors: 'done',
-      shirts: 'done',
-      medals: 'done',
-      route: 'attention',
-      insurance: 'blocking',
-      ems: 'blocking',
-      sponsors: 'attention',
-      volunteers: 'attention',
-      'fourw-partners': 'done',
-      timing: 'done',
-      hydration: 'done',
-      emergency: 'attention',
-      security: 'done',
-      packet: 'done',
-      awards: 'done',
-      survey: 'attention',
-      followup: 'attention',
+      registration: 'done', waiver: 'done', permits: 'done', comms: 'done', cause: 'done', vendors: 'done', shirts: 'done', medals: 'done',
+      route: 'attention', insurance: 'blocking', ems: 'attention', sponsors: 'attention', volunteers: 'attention', 'fourw-partners': 'done',
+      timing: 'done', hydration: 'done', emergency: 'attention', security: 'done', packet: 'done', awards: 'done', survey: 'attention', followup: 'attention',
+      budget: 'attention', 'payment-setup': 'done', 'local-vendors': 'done', accessibility: 'attention',
     },
   }),
   fromTemplate('money-walk', {
@@ -66,10 +79,11 @@ export const SAMPLE_EVENTS = [
     date: '2026-11-07',
     location: 'Main Street Commons',
     phase: 'live',
+    primaryW: 'wealth',
+    seriesId: 'series-money-walk',
     checklist: {
-      registration: 'done', waiver: 'done', insurance: 'done', permits: 'done', route: 'done', ems: 'done',
-      emergency: 'done', security: 'attention', volunteers: 'attention', hydration: 'done', packet: 'done', vendors: 'attention',
-      shirts: 'done', sponsors: 'done', cause: 'done', 'fourw-partners': 'done', comms: 'done', survey: 'done', followup: 'attention',
+      ...done(['registration', 'waiver', 'insurance', 'permits', 'route', 'ems', 'emergency', 'hydration', 'packet', 'shirts', 'sponsors', 'cause', 'fourw-partners', 'comms', 'survey', 'budget', 'payment-setup', 'local-vendors', 'accessibility', 'language-access']),
+      security: 'attention', volunteers: 'attention', vendors: 'attention', followup: 'attention', 'briefing-pack': 'attention', 'community-notice': 'attention',
     },
   }),
   fromTemplate('legacy-walk', {
@@ -78,11 +92,55 @@ export const SAMPLE_EVENTS = [
     date: '2026-09-26',
     location: 'Old Main Street Historic District',
     phase: 'complete',
-    checklist: Object.fromEntries(
-      ['registration', 'waiver', 'insurance', 'permits', 'route', 'ems', 'emergency', 'security', 'volunteers', 'hydration', 'packet', 'vendors', 'shirts', 'sponsors', 'cause', 'fourw-partners', 'comms', 'survey', 'followup'].map((k) => [k, 'done']),
-    ),
+    primaryW: 'wisdom',
+    seriesId: 'series-legacy-walk',
+    weather: { status: 'go', note: 'Clear, 68°F at start', decidedBy: 'Dana Whitfield' },
+    distribution: { pledged: null, distributed: 3200, evidence: 'verified', date: '2026-10-15', note: 'Check #1042 acknowledged by the archive board.' },
+    handoff: 'Story checkpoints worked best with an elder and a student together. Library wants to host the archive launch.',
+    checklist: done(['registration', 'waiver', 'insurance', 'permits', 'route', 'ems', 'emergency', 'security', 'volunteers', 'hydration', 'packet', 'vendors', 'shirts', 'sponsors', 'cause', 'fourw-partners', 'comms', 'survey', 'followup', 'budget', 'payment-setup', 'local-vendors', 'accessibility', 'briefing-pack', 'language-access', 'community-notice', 'safety-briefing', 'radio-check', 'checkin-open', 'actuals-entered', 'hours-recorded']),
   }),
+  // Belongs to another organization (tenant isolation fixture).
+  {
+    id: 'evt-eastgate-fun-run',
+    organizationId: OTHER_ORG.id,
+    organization: OTHER_ORG.name,
+    name: 'Eastgate Family Fun Run',
+    typeId: 'one-mile',
+    format: 'physical',
+    purpose: 'family-engagement',
+    fourWs: ['wellness'],
+    primaryW: 'wellness',
+    date: '2027-03-06',
+    location: 'Eastgate Elementary track',
+    expected: 120,
+    price: 10,
+    phase: 'planning',
+    status: 'active',
+    features: ['registration', 'volunteers', 'surveys', 'followup'],
+    checklist: {},
+    sponsors: [],
+  },
 ];
+
+// Validation scenario exception: EMS was cut below the safe minimum to balance
+// the draft budget. EventOS must flag it as a critical risk.
+{
+  const e = SAMPLE_EVENTS[0];
+  const b = defaultBudget(e);
+  e.budget = { ...b, lines: b.lines.map((l) => (l.id === 'exp-ems' ? { ...l, planned: 450, note: 'Cut from $1,200 in draft to balance budget' } : l)) };
+}
+
+/**
+ * Prior-edition results (synthetic) for recurring-event trends.
+ * Real snapshots are recorded when an After Action Review is completed.
+ */
+export const SAMPLE_SNAPSHOTS = [
+  { id: 'snap-5k-2024', eventId: 'hist-5k-2024', seriesId: 'series-northside-5k', organizationId: 'org-demo', name: 'Northside Wellness 5K 2024', date: '2024-10-19', participants: 286, finishers: 268, netRevenue: 2100, localSpend: 6900, volunteerHours: 92, raised: 3100, cvi: 61, epic: 64, incidents: 3, sponsorFulfillment: 0.71, synthetic: true },
+  { id: 'snap-5k-2025', eventId: 'hist-5k-2025', seriesId: 'series-northside-5k', organizationId: 'org-demo', name: 'Northside Wellness 5K 2025', date: '2025-10-18', participants: 361, finishers: 342, netRevenue: 4800, localSpend: 8400, volunteerHours: 118, raised: 4400, cvi: 70, epic: 76, incidents: 2, sponsorFulfillment: 0.86, synthetic: true },
+  { id: 'snap-eastgate-2026', eventId: 'hist-eastgate', seriesId: 'series-eastgate', organizationId: 'org-eastgate', name: 'Eastgate Family Fun Run 2026', date: '2026-03-07', participants: 104, finishers: 101, netRevenue: 310, localSpend: 450, volunteerHours: 30, raised: 0, cvi: 58, epic: 55, incidents: 0, sponsorFulfillment: null, synthetic: true },
+];
+
+export const SAMPLE_ORGS = [SAMPLE_ORG, OTHER_ORG];
 
 /** One participant's Passport, spanning several organizations' events. */
 export const SAMPLE_PASSPORT = {
@@ -120,7 +178,7 @@ export const SAMPLE_PASSPORT = {
   ],
   upcoming: [
     { eventId: 'evt-money-walk', name: 'Run Your Money Walk', date: '2026-11-07', fourW: 'wealth', why: 'You joined the savings challenge' },
-    { eventId: 'evt-wellness-5k', name: 'Northside Wellness 5K', date: '2027-04-17', fourW: 'wellness', why: 'You have run it twice. Early registration is open to you.' },
+    { eventId: 'evt-wellness-5k', name: 'Northside Wellness 5K 2027', date: '2027-04-17', fourW: 'wellness', why: 'You have run it twice. Early registration is open to you.' },
   ],
   privacy: { analytics: true, marketing: true, sharePartners: false, showOnLeaderboards: true },
 };

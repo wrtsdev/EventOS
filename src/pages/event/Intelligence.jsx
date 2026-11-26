@@ -32,7 +32,8 @@ export default function Intelligence({ event, sim }) {
   const negatives = sim.feedback.filter((f) => f.sentiment === 'negative');
   const positives = sim.feedback.filter((f) => f.sentiment === 'positive');
   const ws = event.fourWs ?? [];
-  const sponsorRank = [...sim.sponsors].sort((a, b) => b.boothVisits + b.registrations - (a.boothVisits + a.registrations));
+  const eng = (s) => (s.boothVisits ?? 0) + (s.registrations ?? 0) + (s.promoRedemptions ?? 0);
+  const sponsorRank = sim.live ? [] : [...sim.sponsors].sort((a, b) => eng(b) - eng(a));
 
   const improvements = [
     sim.leakStage && `Fix the "${sim.leakFrom} → ${sim.leakStage}" step: shorten the form and show the total price up front.`,
@@ -107,8 +108,8 @@ export default function Intelligence({ event, sim }) {
       <Section name="Learn" question="What worked, and where did we lose people?">
         <div className="grid-2">
           <Card title="Registration funnel">
-            <Bars rows={sim.funnel.map((f) => ({ label: f.stage, value: f.count, color: f.stage === sim.leakStage ? 'var(--warn)' : undefined }))} format={(v) => v.toLocaleString()} />
-            <p className="small" style={{ marginTop: 10 }}>Biggest in-form drop: <strong>{sim.leakFrom} → {sim.leakStage}</strong>.</p>
+            {sim.funnel.length ? <><Bars rows={sim.funnel.map((f) => ({ label: f.stage, value: f.count, color: f.stage === sim.leakStage ? 'var(--warn)' : undefined }))} format={(v) => v.toLocaleString()} />
+            <p className="small" style={{ marginTop: 10 }}>Biggest in-form drop: <strong>{sim.leakFrom} → {sim.leakStage}</strong>.</p></> : <p className="small muted">Page views are not tracked yet, so the funnel starts at registration: {sim.registered} registered, {sim.payments?.pending ?? 0} with unfinished payment.</p>}
           </Card>
           <Card title="Which cause and 4W produced engagement">
             <dl className="kv">
@@ -123,7 +124,7 @@ export default function Intelligence({ event, sim }) {
           </Card>
           {sponsorRank.length > 0 && (
             <Card title="Which sponsors generated engagement">
-              <Bars rows={sponsorRank.map((s) => ({ label: s.name, value: s.boothVisits + s.registrations + s.promoRedemptions }))} />
+              <Bars rows={sponsorRank.map((s) => ({ label: s.name, value: eng(s) }))} />
             </Card>
           )}
           <Card title="Where participants came from">

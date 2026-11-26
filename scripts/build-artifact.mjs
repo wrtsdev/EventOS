@@ -5,7 +5,19 @@ import { join } from 'node:path';
 
 const dist = 'dist/assets';
 const files = readdirSync(dist);
-const js = readFileSync(join(dist, files.find((f) => f.endsWith('.js'))), 'utf8').replace(/<\/script/gi, '<\\/script');
+// The entry script is the one index.html loads. Other .js files are lazy chunks for
+// the iPhone app's native plugins, which never load in a browser.
+const entry = readFileSync('dist/index.html', 'utf8').match(/<script[^>]+src="[^"]*assets\/([^"]+\.js)"/)?.[1];
+if (!entry) throw new Error('Could not find the entry script in dist/index.html');
+const js = readFileSync(join(dist, entry), 'utf8').replace(/<\/script/gi, '<\\/script');
+// Inline the brand images so the single-file preview shows the real logo.
+let jsInlined = js;
+for (const f of ['wrts-wordmark.webp', 'wrts-wordmark-white.webp']) {
+  const uri = 'data:image/webp;base64,' + readFileSync(join('dist/assets/brand', f)).toString('base64');
+  // Vite emits `${BASE}assets/brand/<file>`; swap the whole template for the data URI.
+  const tpl = new RegExp(String.raw`\x60\$\{[A-Za-z_$][\w$]*\}assets/brand/` + f.replace('.', String.raw`\.`) + String.raw`\x60`, 'g');
+  jsInlined = jsInlined.replace(tpl, JSON.stringify(uri)).split('./assets/brand/' + f).join(uri);
+}
 const css = readFileSync(join(dist, files.find((f) => f.endsWith('.css'))), 'utf8').replace(/<\/style/gi, '<\\/style');
 
 const html = `<title>WRTS EventOS</title>
@@ -16,7 +28,7 @@ const html = `<title>WRTS EventOS</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Figtree:wght@400;500;600;700&display=swap">
 <style>${css}</style>
 <div id="root"></div>
-<script type="module">${js}</script>
+<script type="module">${jsInlined}</script>
 `;
 mkdirSync('artifact', { recursive: true });
 writeFileSync('artifact/eventos.html', html);

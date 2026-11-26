@@ -55,3 +55,25 @@ Every entity carries `id`, `createdAt`, `updatedAt`. Organization-owned entities
 - Host or referral groups (a church, a chapter) describe the group, never the participant.
 - ZIP-level views suppress cells under 10 in exports.
 - HubSpot receives only participants with `marketing` consent, and only the properties listed in `src/integrations/hubspot.js`.
+
+## EPIC × 4Ws additions
+
+The production schema is in `schema.sql`. New or changed entities:
+
+| Entity | Purpose |
+|---|---|
+| Event (changed) | `primaryW`, `status` (active / canceled / archived), `phase` adds `eventday`, `seriesId`, `priorEventId`, goals |
+| EventFourW | One primary W, any number of supporting Ws |
+| OutcomeIndicator | Target, actual, unit, direction, evidence level, reach flag |
+| EpicControl / EventControl | Control library (domain, severity, stage) and per-event status; missing status = not assessed |
+| EvidenceRecord | Verified / reported / estimated evidence attached to controls, outcomes, partners, distributions |
+| ScoreSnapshot | EPIC score history recorded at staged reviews |
+| BudgetLine / FinancialTransaction | Planned vs actual, local and essential flags, minimums, payment status |
+| Partner / EventPartner | Intended vs actual outcomes with evidence |
+| SponsorshipPackage / Sponsorship / SponsorshipDeliverable | Inventory, commitments, fulfillment |
+| BeneficiaryDistribution | Funds actually distributed, with evidence |
+| WorkforceRole / WorkforceAssignment | Volunteer, paid and contracted work kept separate; minors flagged |
+| Risk / EmergencyContact / Incident | Safety register; incidents are restricted records |
+| Communication / Question / Document | Approval-gated messages, open questions, document register |
+| AfterActionReview / CorrectiveAction | Post-event learning; actions carry into the next edition |
+| Membership / AuditLog | Roles per organization; change history |

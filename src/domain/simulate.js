@@ -6,7 +6,11 @@
 import { FOUR_WS } from './fourW.js';
 import { getEventType } from './catalog.js';
 import { participantLifetimeValue, communityLifetimeValue, communityValueIndex } from './metrics.js';
-import { isPhysical, volunteerNeed } from './blueprint.js';
+import { isPhysical, volunteerNeed, isCanceled } from './eventBasics.js';
+import { sponsorsFor, DEFAULT_SPONSORS } from './sponsors.js';
+import { plannedExpense } from './finance.js';
+
+export { sponsorsFor, DEFAULT_SPONSORS };
 
 export function hashString(s) {
   let h = 2166136261;
@@ -85,32 +89,6 @@ const NEEDS = [
   { need: 'Small business support', fourW: 'wealth' },
 ];
 
-export const DEFAULT_SPONSORS = {
-  wellness: [
-    { id: 'sp-health', name: 'Riverside Health System', tier: 'Presenting', amount: 7500, activation: 'Health screening tent + hydration' },
-    { id: 'sp-gym', name: 'Northside Fitness Collective', tier: 'Community', amount: 1500, activation: '30-day challenge prizes' },
-  ],
-  wealth: [
-    { id: 'sp-cu', name: 'Unity Community Credit Union', tier: 'Presenting', amount: 8000, activation: 'Savings challenge + account match' },
-    { id: 'sp-realty', name: 'Keystone Homeownership Center', tier: 'Community', amount: 2000, activation: 'Homebuyer RSVP booth' },
-  ],
-  wisdom: [
-    { id: 'sp-lib', name: 'County Public Library Foundation', tier: 'Presenting', amount: 4000, activation: 'Story capture booth' },
-    { id: 'sp-bank', name: 'Heritage Savings Bank', tier: 'Community', amount: 1500, activation: 'Checkpoint passport stamps' },
-  ],
-  work: [
-    { id: 'sp-wfb', name: 'Regional Workforce Board', tier: 'Presenting', amount: 6000, activation: 'Employer row + resume clinic' },
-    { id: 'sp-cc', name: 'Tri-County Community College', tier: 'Community', amount: 2500, activation: 'Skills workshop sign-ups' },
-  ],
-};
-
-export function sponsorsFor(event) {
-  if (event.sponsors?.length) return event.sponsors;
-  if (!event.features?.includes('sponsors')) return [];
-  const ws = event.fourWs?.length ? event.fourWs : ['wellness'];
-  return ws.flatMap((w) => DEFAULT_SPONSORS[w]).slice(0, 3);
-}
-
 /**
  * Generate canonical participants for an event at a given phase.
  * Returns objects in the same shape the Integration Gateway produces.
@@ -118,7 +96,7 @@ export function sponsorsFor(event) {
 export function generateParticipants(event, phase) {
   const r = rng(event.id + ':participants');
   const goal = Number(event.cap || event.expected) || 100;
-  const fill = phase === 'complete' ? 0.96 + r() * 0.06 : phase === 'live' ? 0.66 + r() * 0.08 : 0;
+  const fill = phase === 'complete' || phase === 'eventday' ? 0.96 + r() * 0.06 : phase === 'live' ? 0.66 + r() * 0.08 : 0;
   const n = Math.round(goal * fill);
   const ws = event.fourWs?.length ? event.fourWs : ['wellness'];
   const teamCount = event.features?.includes('teams') ? Math.max(3, Math.round(n / 28)) : 0;
@@ -172,6 +150,7 @@ function countBy(list, fn) {
 /** Full simulated performance for an event. Planning-phase events return a light projection. */
 export function simulateEvent(event, org = {}) {
   const phase = event.phase ?? 'planning';
+  const canceled = isCanceled(event);
   const r = rng(event.id + ':metrics');
   const type = getEventType(event.typeId);
   const goal = Number(event.cap || event.expected) || 100;
@@ -217,19 +196,26 @@ export function simulateEvent(event, org = {}) {
   // Money
   const freeEvent = price === 0;
   const registrationRevenue = n * price;
+  // Failed card payments: these people are NOT counted as registered until a retry succeeds.
+  const failed = phase === 'planning' ? 0 : Math.max(1, Math.round(n * 0.04));
+  const recovered = phase === 'complete' ? Math.round(failed * 0.6) : phase === 'eventday' ? Math.round(failed * 0.5) : Math.round(failed * 0.3);
+  const payments = phase === 'planning' || price === 0 ? null : { attempted: n + failed - recovered, failed, recovered, pending: failed - recovered };
+  const checkedIn = phase === 'eventday' ? Math.round(n * 0.71) : phase === 'complete' ? Math.round(n * 0.97) : 0;
   const sponsorship = sponsors.reduce((a, s) => a + (Number(s.amount) || 0), 0) * (phase === 'planning' ? 0 : 1);
   const donations = participants.filter((p) => p.donated).length * (28 + Math.round(r() * 20));
   const fundraising = teams.reduce((a, t) => a + t.raised, 0);
   const merchandise = event.features?.includes('shirts') ? Math.round(n * (0.14 + r() * 0.06) * 25) : 0;
   const fixedCosts = physical ? 2400 + (type.timed ? 1800 : 0) + (Number(event.expected) > 300 ? 1500 : 600) : 600;
   const perHead = (event.features?.includes('shirts') ? 7.5 : 0) + (event.features?.includes('medals') ? 4.5 : 0) + (physical ? 3 : 1.2) + price * 0.06;
-  const costs = Math.round(fixedCosts + perHead * n);
+  // Costs come from the event budget so Finance and the dashboards agree.
+  void fixedCosts;
+  const costs = phase === 'complete' ? Math.round(plannedExpense(event) * (n / Math.max(1, goal)) * 0.35 + plannedExpense(event) * 0.65) : plannedExpense(event);
   const revenueTotal = registrationRevenue + sponsorship + merchandise;
   const margin = revenueTotal - costs;
 
   // People and impact
   const volunteersNeeded = volunteerNeed(event);
-  const volunteers = phase === 'planning' ? 0 : Math.round(volunteersNeeded * (phase === 'complete' ? 1.08 : 0.72));
+  const volunteers = phase === 'planning' ? 0 : Math.round(volunteersNeeded * (phase === 'complete' || phase === 'eventday' ? 1.08 : 0.72));
   const finishers = participants.filter((p) => p.finished).length;
   const returning = participants.filter((p) => p.returning).length;
   const referrals = participants.filter((p) => p.referredBy).length;
@@ -243,7 +229,7 @@ export function simulateEvent(event, org = {}) {
 
   // Engagement
   const engagement = {
-    emailsSent: phase === 'planning' ? 0 : phase === 'live' ? 5 : 8,
+    emailsSent: phase === 'planning' ? 0 : phase === 'live' ? 5 : phase === 'eventday' ? 6 : 8,
     openRate: 0.46 + r() * 0.12,
     clickRate: 0.09 + r() * 0.05,
     referralRegistrations: referrals,
@@ -340,6 +326,9 @@ export function simulateEvent(event, org = {}) {
 
   return {
     phase,
+    canceled,
+    payments,
+    checkedIn,
     participants,
     registered: n,
     goal,

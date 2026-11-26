@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>EventOS · Offline</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #050b54; color: #fff; font: 16px/1.5 -apple-system, system-ui, sans-serif; }
+  main { min-height: 100%; box-sizing: border-box; display: grid; place-content: center; gap: 14px; text-align: center;
+         padding: calc(24px + env(safe-area-inset-top)) 28px calc(24px + env(safe-area-inset-bottom)); }
+  img { width: 120px; margin: 0 auto 6px; }
+  h1 { margin: 0; font-size: 24px; }
+  p { margin: 0; color: #c9d1ff; max-width: 320px; }
+  button { margin-top: 10px; justify-self: center; font: 600 16px/1 inherit; color: #050b54; background: #fff; border: 0; border-radius: 999px; padding: 14px 28px; }
+  button:active { opacity: .8; }
+</style>
+</head>
+<body>
+<main>
+  <img src="logo.png" alt="WRTS" />
+  <h1>You’re offline</h1>
+  <p>EventOS needs an internet connection. Check Wi-Fi or cellular data, then try again.</p>
+  <button id="retry" type="button">Try again</button>
+</main>
+<script>
+  var APP = 'https://eventos.werunthesestreetz.com/';
+  function retry() { location.replace(APP); }
+  document.getElementById('retry').addEventListener('click', retry);
+  window.addEventListener('online', retry);
+</script>
+</body>
+</html>
